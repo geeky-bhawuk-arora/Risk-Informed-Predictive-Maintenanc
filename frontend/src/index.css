@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased font-sans bg-slate-900 text-slate-100;
+  }
+}
+
+.glass-panel {
+  @apply bg-slate-800/80 backdrop-blur-md border border-slate-700/50 rounded-xl shadow-xl transition-all duration-300;
+}
+
+.glass-panel:hover {
+  @apply border-slate-600/80 shadow-2xl;
+}
+
+/* Custom scrollbar for webkit */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a; 
+}
+::-webkit-scrollbar-thumb {
+  background: #334155; 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569; 
+}
