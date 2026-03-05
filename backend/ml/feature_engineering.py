@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from datetime import datetime
 
 DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localhost:5432/risk_db")
@@ -97,7 +97,7 @@ def run_feature_engineering():
     
     # Save to database
     with engine.connect() as con:
-        con.execute(pd.io.sql.text("TRUNCATE TABLE COMPONENT_FEATURES CASCADE;"))
+        con.execute(text("TRUNCATE TABLE COMPONENT_FEATURES CASCADE;"))
         con.commit()
     
     df_features.to_sql('component_features', engine, if_exists='append', index=False)

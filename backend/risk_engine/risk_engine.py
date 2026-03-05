@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from datetime import datetime
 
 DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localhost:5432/risk_db")
@@ -56,7 +56,7 @@ def calculate_risk():
     df_risk = df[['aircraft_id', 'component_id', 'failure_probability', 'impact_score', 'risk_score', 'risk_level', 'dominant_driver', 'computed_at']]
     
     with engine.connect() as con:
-        con.execute(pd.io.sql.text("TRUNCATE TABLE RISK_SCORE CASCADE;"))
+        con.execute(text("TRUNCATE TABLE RISK_SCORE CASCADE;"))
         con.commit()
     
     df_risk.to_sql('risk_score', engine, if_exists='append', index=False)
@@ -97,7 +97,7 @@ def generate_priorities(df_risk):
     df_prio = df_ranked[['aircraft_id', 'component_id', 'priority_rank', 'risk_score', 'recommended_action', 'reasoning', 'generated_at']]
     
     with engine.connect() as con:
-        con.execute(pd.io.sql.text("TRUNCATE TABLE MAINTENANCE_PRIORITY CASCADE;"))
+        con.execute(text("TRUNCATE TABLE MAINTENANCE_PRIORITY CASCADE;"))
         con.commit()
         
     df_prio.to_sql('maintenance_priority', engine, if_exists='append', index=False)

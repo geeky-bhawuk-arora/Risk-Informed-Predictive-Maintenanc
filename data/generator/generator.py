@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import random
 from faker import Faker
 
@@ -182,16 +182,16 @@ def generate_maintenance_logs(components_df):
 def main():
     print("Clearing existing data...")
     with engine.connect() as con:
-        con.execute(pd.io.sql.text("TRUNCATE TABLE maintenance_priority CASCADE;"))
-        con.execute(pd.io.sql.text("TRUNCATE TABLE risk_score CASCADE;"))
-        con.execute(pd.io.sql.text("TRUNCATE TABLE failure_probability CASCADE;"))
-        con.execute(pd.io.sql.text("TRUNCATE TABLE component_features CASCADE;"))
-        con.execute(pd.io.sql.text("TRUNCATE TABLE flight_operation CASCADE;"))
-        con.execute(pd.io.sql.text("TRUNCATE TABLE sensor_reading CASCADE;"))
-        con.execute(pd.io.sql.text("TRUNCATE TABLE maintenance_log CASCADE;"))
-        con.execute(pd.io.sql.text("TRUNCATE TABLE component CASCADE;"))
-        con.execute(pd.io.sql.text("TRUNCATE TABLE aircraft CASCADE;"))
-        con.execute(pd.io.sql.text("TRUNCATE TABLE impact_score CASCADE;"))
+        con.execute(text("TRUNCATE TABLE maintenance_priority CASCADE;"))
+        con.execute(text("TRUNCATE TABLE risk_score CASCADE;"))
+        con.execute(text("TRUNCATE TABLE failure_probability CASCADE;"))
+        con.execute(text("TRUNCATE TABLE component_features CASCADE;"))
+        con.execute(text("TRUNCATE TABLE flight_operation CASCADE;"))
+        con.execute(text("TRUNCATE TABLE sensor_reading CASCADE;"))
+        con.execute(text("TRUNCATE TABLE maintenance_log CASCADE;"))
+        con.execute(text("TRUNCATE TABLE component CASCADE;"))
+        con.execute(text("TRUNCATE TABLE aircraft CASCADE;"))
+        con.execute(text("TRUNCATE TABLE impact_score CASCADE;"))
         con.commit()
 
     print("Generating impact scores...")

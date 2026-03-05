@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -85,7 +85,7 @@ def train_and_predict():
     
     # Save to database
     with engine.connect() as con:
-        con.execute(pd.io.sql.text("TRUNCATE TABLE FAILURE_PROBABILITY CASCADE;"))
+        con.execute(text("TRUNCATE TABLE FAILURE_PROBABILITY CASCADE;"))
         con.commit()
         
     df_preds.to_sql('failure_probability', engine, if_exists='append', index=False)
