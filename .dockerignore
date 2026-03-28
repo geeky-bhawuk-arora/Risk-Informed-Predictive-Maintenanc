@@ -1,0 +1,13 @@
+# Ignore unnecessarily large or sensitive files in Docker build context
+node_modules/
+.git/
+__pycache__/
+*.pyc
+pgdata/
+mlruns/
+models/*.pkl
+dist/
+venv/
+.env
+.DS_Store
+*.swp

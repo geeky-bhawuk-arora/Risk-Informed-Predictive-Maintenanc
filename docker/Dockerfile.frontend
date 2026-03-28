@@ -1,10 +1,17 @@
-FROM node:18-alpine
+FROM node:18-slim
 
 WORKDIR /app
 
+# Install dependencies first for better caching
 COPY frontend/package.json ./
 RUN npm install
 
+# Copy all source code for the frontend
 COPY frontend/ ./
 
+# Expose Vite default port
+EXPOSE 5173
+
+# Vite runs in dev mode by default as per the user's current dev setup
+# "--host" is required for Docker access from outside the container
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

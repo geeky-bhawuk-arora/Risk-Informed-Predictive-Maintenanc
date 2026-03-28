@@ -8,31 +8,18 @@ const api = axios.create({
 
 export const fleetApi = {
   getOverview: () => api.get('/fleet/overview'),
-  getHealthScore: () => api.get('/fleet/health-score'),
+  getAircraft: (id: number) => api.get(`/fleet/aircraft/${id}`),
 };
 
 export const componentsApi = {
   getRankings: () => api.get('/components/risk-rankings'),
-  getRiskDetails: (id: number) => api.get(`/components/${id}/risk`),
-  getRiskTrend: (id: number) => api.get(`/components/${id}/risk-trend`),
+  getDetail: (id: number) => api.get(`/components/${id}/detail`),
   exportCSV: () => `${API_BASE_URL}/components/risk-rankings/export`,
-};
-
-export const aircraftApi = {
-  getComponents: (id: number) => api.get(`/aircraft/${id}/components`),
-};
-
-export const maintenanceApi = {
-  getSchedule: () => api.get('/maintenance/schedule'),
-};
-
-export const settingsApi = {
-  updateWeights: (weights: {safety: number, operational: number, cost: number}) => 
-    api.post('/settings/impact-weights', weights),
 };
 
 export const adminApi = {
   regenerateData: () => api.post('/data/regenerate'),
+  getModelStats: () => api.get('/admin/model-stats'),
 };
 
 export default api;

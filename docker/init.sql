@@ -1,105 +1,93 @@
-CREATE TABLE AIRCRAFT (
+-- RBAMPS Database Schema Initialization
+
+CREATE TABLE aircraft (
     aircraft_id SERIAL PRIMARY KEY,
-    tail_number VARCHAR(20) UNIQUE NOT NULL,
-    aircraft_model VARCHAR(50) NOT NULL,
-    manufacturer VARCHAR(100),
-    entry_into_service_date DATE,
-    operator VARCHAR(100),
+    registration VARCHAR(20) UNIQUE NOT NULL,
+    type VARCHAR(50),
+    manufacture_date DATE,
+    fleet_entry_date DATE,
+    total_flight_hours FLOAT DEFAULT 0.0,
+    total_flight_cycles INTEGER DEFAULT 0,
     status VARCHAR(50)
 );
 
-CREATE TABLE COMPONENT (
+CREATE TABLE component (
     component_id SERIAL PRIMARY KEY,
-    aircraft_id INTEGER REFERENCES AIRCRAFT(aircraft_id),
-    component_type VARCHAR(100) NOT NULL,
-    ata_chapter VARCHAR(10),
-    criticality_class VARCHAR(20),
-    expected_life_hours INTEGER,
-    manufacturer VARCHAR(100)
+    aircraft_id INTEGER REFERENCES aircraft(aircraft_id),
+    component_type VARCHAR(100),
+    name VARCHAR(255),
+    installation_date DATE,
+    age_hours FLOAT DEFAULT 0.0,
+    mtbf FLOAT,
+    safety_impact FLOAT DEFAULT 0.0,
+    operational_impact FLOAT DEFAULT 0.0,
+    cost_impact FLOAT DEFAULT 0.0
 );
 
-CREATE TABLE MAINTENANCE_LOG (
-    maintenance_event_id SERIAL PRIMARY KEY,
-    aircraft_id INTEGER REFERENCES AIRCRAFT(aircraft_id),
-    component_id INTEGER REFERENCES COMPONENT(component_id),
-    event_type VARCHAR(50),
-    failure_mode VARCHAR(100),
-    action_taken VARCHAR(255),
-    unscheduled BOOLEAN,
-    event_timestamp TIMESTAMP
+CREATE TABLE maintenance_log (
+    log_id SERIAL PRIMARY KEY,
+    component_id INTEGER REFERENCES component(component_id),
+    maintenance_date TIMESTAMP,
+    type VARCHAR(50),
+    description TEXT,
+    outcome VARCHAR(100)
 );
 
-CREATE TABLE SENSOR_READING (
+CREATE TABLE sensor_data (
     reading_id SERIAL PRIMARY KEY,
-    aircraft_id INTEGER REFERENCES AIRCRAFT(aircraft_id),
-    component_id INTEGER REFERENCES COMPONENT(component_id),
-    parameter VARCHAR(50),
-    value FLOAT,
-    unit VARCHAR(20),
-    timestamp TIMESTAMP
+    component_id INTEGER REFERENCES component(component_id),
+    sensor_type VARCHAR(50),
+    timestamp TIMESTAMP,
+    value FLOAT
 );
 
-CREATE TABLE FLIGHT_OPERATION (
+CREATE TABLE flight_operations (
     flight_id SERIAL PRIMARY KEY,
-    aircraft_id INTEGER REFERENCES AIRCRAFT(aircraft_id),
-    flight_hours FLOAT,
-    flight_cycles INTEGER,
-    departure VARCHAR(10),
-    arrival VARCHAR(10),
-    delay_minutes INTEGER,
-    flight_date DATE
+    aircraft_id INTEGER REFERENCES aircraft(aircraft_id),
+    departure VARCHAR(100),
+    arrival VARCHAR(100),
+    duration_hours FLOAT,
+    departure_time TIMESTAMP,
+    cycles_incremented INTEGER DEFAULT 1
 );
 
-CREATE TABLE COMPONENT_FEATURES (
-    component_id INTEGER PRIMARY KEY REFERENCES COMPONENT(component_id),
-    aircraft_id INTEGER REFERENCES AIRCRAFT(aircraft_id),
-    time_since_last_maint FLOAT,
-    failure_count_90d INTEGER,
-    avg_temp_30d FLOAT,
-    vibration_trend FLOAT,
-    usage_intensity FLOAT,
-    aircraft_age FLOAT,
-    component_criticality VARCHAR(20),
-    feature_timestamp TIMESTAMP
-);
-
-CREATE TABLE FAILURE_PROBABILITY (
-    prediction_id SERIAL PRIMARY KEY,
-    aircraft_id INTEGER REFERENCES AIRCRAFT(aircraft_id),
-    component_id INTEGER REFERENCES COMPONENT(component_id),
-    prediction_horizon INTEGER,
-    failure_probability FLOAT,
-    model_version VARCHAR(50),
-    prediction_timestamp TIMESTAMP
-);
-
-CREATE TABLE IMPACT_SCORE (
-    component_type VARCHAR(100) PRIMARY KEY,
-    safety_impact FLOAT,
-    operational_impact FLOAT,
-    cost_impact FLOAT,
-    justification TEXT
-);
-
-CREATE TABLE RISK_SCORE (
+CREATE TABLE risk_score (
     risk_id SERIAL PRIMARY KEY,
-    aircraft_id INTEGER REFERENCES AIRCRAFT(aircraft_id),
-    component_id INTEGER REFERENCES COMPONENT(component_id),
+    component_id INTEGER REFERENCES component(component_id),
     failure_probability FLOAT,
     impact_score FLOAT,
     risk_score FLOAT,
     risk_level VARCHAR(20),
-    dominant_driver VARCHAR(50),
     computed_at TIMESTAMP
 );
 
-CREATE TABLE MAINTENANCE_PRIORITY (
-    priority_id SERIAL PRIMARY KEY,
-    aircraft_id INTEGER REFERENCES AIRCRAFT(aircraft_id),
-    component_id INTEGER REFERENCES COMPONENT(component_id),
-    priority_rank INTEGER,
+CREATE TABLE risk_trend (
+    trend_id SERIAL PRIMARY KEY,
+    component_id INTEGER REFERENCES component(component_id),
     risk_score FLOAT,
+    timestamp DATE
+);
+
+CREATE TABLE component_features (
+    feature_id SERIAL PRIMARY KEY,
+    component_id INTEGER REFERENCES component(component_id),
+    days_since_last_maintenance FLOAT,
+    historical_failure_count INTEGER,
+    component_age_hours FLOAT,
+    sensor_mean_7d FLOAT,
+    sensor_std_7d FLOAT,
+    sensor_trend_slope FLOAT,
+    aircraft_age_years FLOAT,
+    flight_cycles_30d INTEGER,
+    utilization_intensity FLOAT,
+    feature_timestamp TIMESTAMP
+);
+
+CREATE TABLE maintenance_priority (
+    priority_id SERIAL PRIMARY KEY,
+    component_id INTEGER REFERENCES component(component_id),
+    risk_score FLOAT,
+    priority_rank INTEGER,
     recommended_action VARCHAR(255),
-    reasoning TEXT,
-    generated_at TIMESTAMP
+    created_at TIMESTAMP
 );

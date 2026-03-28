@@ -18,7 +18,13 @@ services:
       timeout: 5s
       retries: 5
 
-  # Data Generator & ML processing (cron or script)
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.7.1
+    ports:
+      - "5000:5000"
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /app/artifacts
+
+  # Data Generator & ML Pipeline (Single setup and run)
   ml-service:
     build: 
       context: .
@@ -26,8 +32,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mlflow:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://risk_user:risk_password@db:5432/risk_db
+      MLFLOW_TRACKING_URI: http://mlflow:5000
 
   backend:
     build:
@@ -35,11 +44,15 @@ services:
       dockerfile: docker/Dockerfile.backend
     ports:
       - "8000:8000"
+    restart: always
     depends_on:
       db:
         condition: service_healthy
+      ml-service:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://risk_user:risk_password@db:5432/risk_db
+      MLFLOW_TRACKING_URI: http://mlflow:5000
 
   frontend:
     build:
@@ -47,8 +60,12 @@ services:
       dockerfile: docker/Dockerfile.frontend
     ports:
       - "5173:5173"
+    restart: always
     depends_on:
       - backend
+    environment:
+      - VITE_API_URL=http://localhost:8000/api/v1
 
 volumes:
   pgdata:
+    driver: local

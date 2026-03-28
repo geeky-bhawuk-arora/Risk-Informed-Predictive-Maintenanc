@@ -2,11 +2,24 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install system dependencies for psycopg2 and other ML libs
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy all python code to enable paths to work correctly (backend accesses ml for triggering pipeline)
-COPY backend/ ./backend/
-COPY data/ ./data/
+# Use combined requirements for backend (it triggers ML too)
+COPY data/requirements.txt ./data_requirements.txt
+COPY backend/requirements.txt ./backend_requirements.txt
+RUN pip install --no-cache-dir -r data_requirements.txt
+RUN pip install --no-cache-dir -r backend_requirements.txt
+
+# Copy entire project context to maintain absolute path imports (e.g. from backend.db...)
+COPY . .
+
+# Ensure the backend directory is in the PYTHONPATH
+ENV PYTHONPATH=/app
+
+EXPOSE 8000
 
 CMD ["uvicorn", "backend.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -85,17 +85,11 @@ class RiskTrend(Base):
     risk_score = Column(Float)
     timestamp = Column(Date) # Storing daily risk scores
 
-class ComponentFeatures(Base):
-    __tablename__ = "component_features"
-    feature_id = Column(Integer, primary_key=True, index=True)
+class MaintenancePriority(Base):
+    __tablename__ = "maintenance_priority"
+    priority_id = Column(Integer, primary_key=True, index=True)
     component_id = Column(Integer, ForeignKey("component.component_id"))
-    days_since_last_maintenance = Column(Float)
-    historical_failure_count = Column(Integer)
-    component_age_hours = Column(Float)
-    sensor_mean_7d = Column(Float)
-    sensor_std_7d = Column(Float)
-    sensor_trend_slope = Column(Float)
-    aircraft_age_years = Column(Float)
-    flight_cycles_30d = Column(Integer)
-    utilization_intensity = Column(Float)
-    feature_timestamp = Column(DateTime)
+    risk_score = Column(Float)
+    priority_rank = Column(Integer) # Higher score = higher rank (1, 2, 3...)
+    recommended_action = Column(String(255))
+    created_at = Column(DateTime)
