@@ -1,7 +1,9 @@
 import os
 import pandas as pd
+import numpy as np
 from sqlalchemy import create_engine, text
-from datetime import datetime
+from scipy.stats import linregress
+from datetime import datetime, timedelta
 
 DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localhost:5432/risk_db")
 engine = create_engine(DB_URL)
@@ -9,99 +11,103 @@ engine = create_engine(DB_URL)
 def run_feature_engineering():
     print("Starting Feature Engineering...")
     
-    # 1. Load Data
-    query_comps = "SELECT component_id, aircraft_id, criticality_class FROM COMPONENT"
-    df_comps = pd.read_sql(query_comps, engine)
-    
-    query_aircraft = "SELECT aircraft_id, entry_into_service_date FROM AIRCRAFT"
-    df_aircraft = pd.read_sql(query_aircraft, engine)
-    
-    query_maint = "SELECT component_id, event_timestamp, unscheduled FROM MAINTENANCE_LOG"
-    df_maint = pd.read_sql(query_maint, engine)
-    
-    query_sensors = "SELECT component_id, parameter, value, timestamp FROM SENSOR_READING WHERE timestamp >= NOW() - INTERVAL '30 days'"
-    df_sensors = pd.read_sql(query_sensors, engine)
-    
-    query_flights = "SELECT aircraft_id, flight_hours FROM FLIGHT_OPERATION WHERE flight_date >= CURRENT_DATE - INTERVAL '30 days'"
-    df_flights = pd.read_sql(query_flights, engine)
+    # 1. Load data
+    df_comps = pd.read_sql("SELECT * FROM component", engine)
+    df_aircraft = pd.read_sql("SELECT * FROM aircraft", engine)
+    df_maint = pd.read_sql("SELECT * FROM maintenance_log", engine)
+    df_sensors = pd.read_sql("SELECT * FROM sensor_data WHERE timestamp >= NOW() - INTERVAL '30 days'", engine)
+    df_flights = pd.read_sql("SELECT * FROM flight_operations WHERE departure_time >= NOW() - INTERVAL '30 days'", engine)
     
     now = pd.Timestamp.now()
-    
-    features = []
-    
-    # Aircraft Age
-    df_aircraft['entry_into_service_date'] = pd.to_datetime(df_aircraft['entry_into_service_date'])
-    df_aircraft['aircraft_age'] = (now - df_aircraft['entry_into_service_date']).dt.days / 365.25
-    
-    # Flight usage intensity per aircraft
-    df_usage = df_flights.groupby('aircraft_id')['flight_hours'].sum().reset_index()
-    df_usage.rename(columns={'flight_hours': 'usage_intensity'}, inplace=True)
+    features_list = []
     
     for _, comp in df_comps.iterrows():
         comp_id = comp['component_id']
         ac_id = comp['aircraft_id']
         
-        # Maintenance Features
+        # 1. days_since_last_maintenance
         comp_maint = df_maint[df_maint['component_id'] == comp_id]
         if not comp_maint.empty:
-            last_maint = pd.to_datetime(comp_maint['event_timestamp'].max())
-            time_since_last_maint = (now - last_maint).days
-            # Failures in last 90 days (unscheduled maintenance)
-            failures_90d = comp_maint[
-                (comp_maint['unscheduled'] == True) & 
-                (pd.to_datetime(comp_maint['event_timestamp']) >= now - pd.Timedelta(days=90))
-            ].shape[0]
+            last_maint_date = pd.to_datetime(comp_maint['maintenance_date']).max()
+            days_since_maint = (now - last_maint_date).days
         else:
-            time_since_last_maint = 999  # No maintenance recorded
-            failures_90d = 0
+            days_since_maint = (now - pd.to_datetime(comp['installation_date'])).days
             
-        # Sensor Features
+        # 2. historical_failure_count (unscheduled in past 12 months)
+        past_12m = now - timedelta(days=365)
+        failure_count = comp_maint[
+            (comp_maint['type'].str.lower() == 'unscheduled') & 
+            (pd.to_datetime(comp_maint['maintenance_date']) >= past_12m)
+        ].shape[0]
+        
+        # 3. component_age_hours
+        comp_age_hours = comp['age_hours']
+        
+        # Sensor data for this component
         comp_sensors = df_sensors[df_sensors['component_id'] == comp_id]
         
-        avg_temp_30d = 80.0
-        vibration_trend = 0.0
-        
-        if not comp_sensors.empty:
-            temps = comp_sensors[comp_sensors['parameter'] == 'temperature']['value']
-            vibs = comp_sensors[comp_sensors['parameter'] == 'vibration'].sort_values('timestamp')
+        # 4 & 5. sensor_mean_7d, sensor_std_7d
+        past_7d = now - timedelta(days=7)
+        sensors_7d = comp_sensors[pd.to_datetime(comp_sensors['timestamp']) >= past_7d]
+        if not sensors_7d.empty:
+            s_mean = sensors_7d['value'].mean()
+            s_std = sensors_7d['value'].std()
+        else:
+            s_mean = 0.0
+            s_std = 0.0
             
-            if not temps.empty:
-                avg_temp_30d = temps.mean()
-                
-            if len(vibs) >= 2:
-                # Simple linear trend
-                vib_values = vibs['value'].values
-                vibration_trend = vib_values[-1] - vib_values[0]
-                
-        # Aircraft Info
+        # 6. sensor_trend_slope (30 days)
+        if len(comp_sensors) >= 5:
+            # Convert timestamp to ordinal for regression
+            x = pd.to_datetime(comp_sensors['timestamp']).apply(lambda t: t.to_ordinal()).values
+            y = comp_sensors['value'].values
+            slope, _, _, _, _ = linregress(x, y)
+        else:
+            slope = 0.0
+            
+        # 7. aircraft_age_years
         ac_info = df_aircraft[df_aircraft['aircraft_id'] == ac_id]
-        aircraft_age = ac_info['aircraft_age'].values[0] if not ac_info.empty else 5.0
+        if not ac_info.empty:
+            ac_age_years = (now - pd.to_datetime(ac_info['manufacture_date'].iloc[0])).days / 365.25
+        else:
+            ac_age_years = 0.0
+            
+        # 8. flight_cycles_30d
+        ac_flights = df_flights[df_flights['aircraft_id'] == ac_id]
+        cycles_30d = ac_flights['cycles_incremented'].sum()
         
-        usage_info = df_usage[df_usage['aircraft_id'] == ac_id]
-        usage_intensity = usage_info['usage_intensity'].values[0] if not usage_info.empty else 100.0
+        # 9. utilization_intensity (actual / planned)
+        # Assuming planned is 12 hours/day
+        actual_hours = ac_flights['duration_hours'].sum()
+        planned_hours = 30 * 12.0
+        utilization = actual_hours / planned_hours if planned_hours > 0 else 0
         
-        features.append({
+        features_list.append({
             "component_id": comp_id,
-            "aircraft_id": ac_id,
-            "time_since_last_maint": time_since_last_maint,
-            "failure_count_90d": failures_90d,
-            "avg_temp_30d": avg_temp_30d,
-            "vibration_trend": vibration_trend,
-            "usage_intensity": usage_intensity,
-            "aircraft_age": aircraft_age,
-            "component_criticality": comp['criticality_class'],
+            "days_since_last_maintenance": float(days_since_maint),
+            "historical_failure_count": int(failure_count),
+            "component_age_hours": float(comp_age_hours),
+            "sensor_mean_7d": float(s_mean),
+            "sensor_std_7d": float(s_std),
+            "sensor_trend_slope": float(slope),
+            "aircraft_age_years": float(ac_age_years),
+            "flight_cycles_30d": int(cycles_30d),
+            "utilization_intensity": float(utilization),
             "feature_timestamp": now
         })
         
-    df_features = pd.DataFrame(features)
+    df_features = pd.DataFrame(features_list)
     
     # Save to database
     with engine.connect() as con:
-        con.execute(text("TRUNCATE TABLE COMPONENT_FEATURES CASCADE;"))
+        con.execute(text("TRUNCATE TABLE component_features RESTART IDENTITY;"))
         con.commit()
     
     df_features.to_sql('component_features', engine, if_exists='append', index=False)
     print(f"Feature engineering completed. Wrote {len(df_features)} records.")
+
+if __name__ == "__main__":
+    run_feature_engineering()
 
 if __name__ == "__main__":
     run_feature_engineering()

@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from sqlalchemy import create_engine, text
 import random
 from faker import Faker
@@ -12,207 +12,153 @@ fake = Faker()
 DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localhost:5432/risk_db")
 engine = create_engine(DB_URL)
 
-NUM_AIRCRAFT = 50
-COMPONENTS_PER_AIRCRAFT = 12
-DAYS_HISTORY = 180
+# Constants
+NUM_AIRCRAFT = 20
+COMPONENTS_PER_AIRCRAFT = 10
+HISTORY_DAYS = 365
+LOOKAHEAD_DAYS = 30 # For ground truth labeling
+NOW = datetime.now()
 
-def generate_impact_scores():
-    impact_data = [
-        {"component_type": "Engine", "safety_impact": 1.0, "operational_impact": 1.0, "cost_impact": 1.0, "justification": "Critical flight system"},
-        {"component_type": "Landing Gear", "safety_impact": 0.9, "operational_impact": 0.9, "cost_impact": 0.8, "justification": "Essential for landing"},
-        {"component_type": "Avionics", "safety_impact": 0.8, "operational_impact": 0.7, "cost_impact": 0.9, "justification": "Navigation and control"},
-        {"component_type": "APU", "safety_impact": 0.4, "operational_impact": 0.6, "cost_impact": 0.5, "justification": "Auxiliary power"},
-        {"component_type": "Hydraulics", "safety_impact": 0.9, "operational_impact": 0.8, "cost_impact": 0.6, "justification": "Actuation systems"},
-        {"component_type": "Cabin Environmental", "safety_impact": 0.3, "operational_impact": 0.5, "cost_impact": 0.3, "justification": "Passenger comfort"},
-        {"component_type": "Fuel System", "safety_impact": 1.0, "operational_impact": 0.9, "cost_impact": 0.7, "justification": "Critical for sustained flight"},
-        {"component_type": "Brakes", "safety_impact": 0.8, "operational_impact": 0.8, "cost_impact": 0.6, "justification": "Stopping power on ground"},
-        {"component_type": "Weather Radar", "safety_impact": 0.6, "operational_impact": 0.4, "cost_impact": 0.5, "justification": "Weather avoidance"},
-        {"component_type": "Cargo Doors", "safety_impact": 0.7, "operational_impact": 0.8, "cost_impact": 0.4, "justification": "Required for operation"}
-    ]
-    df = pd.DataFrame(impact_data)
-    df.to_sql('impact_score', engine, if_exists='append', index=False)
-    return [d['component_type'] for d in impact_data]
-
-def generate_aircraft():
-    models = ['Boeing 737', 'Airbus A320', 'Boeing 777', 'Airbus A350', 'Embraer E190']
-    manufacturers = ['Boeing', 'Airbus', 'Boeing', 'Airbus', 'Embraer']
-    
-    aircraft_data = []
-    for i in range(1, NUM_AIRCRAFT + 1):
-        model_idx = random.randint(0, len(models) - 1)
-        eis_date = fake.date_between(start_date="-15y", end_date="-1y")
-        aircraft_data.append({
-            "aircraft_id": i,
-            "tail_number": f"N{random.randint(100, 999)}{fake.lexify('??').upper()}",
-            "aircraft_model": models[model_idx],
-            "manufacturer": manufacturers[model_idx],
-            "entry_into_service_date": eis_date,
-            "operator": "Global Airlines",
-            "status": random.choices(["Active", "In Maintenance"], weights=[0.9, 0.1])[0]
-        })
-    df = pd.DataFrame(aircraft_data)
-    df.to_sql('aircraft', engine, if_exists='append', index=False)
-    return df
-
-def generate_components(aircraft_df, component_types):
-    component_data = []
-    comp_id = 1
-    for _, aircraft in aircraft_df.iterrows():
-        # Assign 10-15 components
-        num_comps = random.randint(10, 15)
-        selected_types = random.choices(component_types, k=num_comps)
-        for c_type in selected_types:
-            component_data.append({
-                "component_id": comp_id,
-                "aircraft_id": aircraft['aircraft_id'],
-                "component_type": c_type,
-                "ata_chapter": str(random.randint(21, 80)),
-                "criticality_class": random.choice(["High", "Medium", "Low"]),
-                "expected_life_hours": random.randint(10000, 50000),
-                "manufacturer": fake.company()
-            })
-            comp_id += 1
-    df = pd.DataFrame(component_data)
-    df.to_sql('component', engine, if_exists='append', index=False)
-    return df
-
-def generate_flight_operations(aircraft_df):
-    flight_data = []
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=DAYS_HISTORY)
-    
-    flight_id = 1
-    for _, aircraft in aircraft_df.iterrows():
-        current_date = start_date
-        while current_date <= end_date:
-            # 1-4 flights per day
-            num_flights = random.randint(1, 4)
-            for _ in range(num_flights):
-                flight_hours = random.uniform(1.0, 12.0)
-                flight_data.append({
-                    "flight_id": flight_id,
-                    "aircraft_id": aircraft['aircraft_id'],
-                    "flight_hours": round(flight_hours, 2),
-                    "flight_cycles": 1,
-                    "departure": fake.lexify('???').upper(),
-                    "arrival": fake.lexify('???').upper(),
-                    "delay_minutes": int(np.random.exponential(15)),
-                    "flight_date": current_date.date()
-                })
-                flight_id += 1
-            current_date += timedelta(days=1)
-            
-    df = pd.DataFrame(flight_data)
-    df.to_sql('flight_operation', engine, if_exists='append', index=False)
-    return df
-
-def generate_sensor_readings(components_df):
-    readings = []
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=DAYS_HISTORY)
-    
-    reading_id = 1
-    for _, component in components_df.iterrows():
-        # Generate periodic readings (e.g. daily)
-        current_date = start_date
-        
-        # Introduce a degradation trend for some components
-        has_trend = random.random() < 0.2
-        trend_factor = random.uniform(0.01, 0.05) if has_trend else 0
-        
-        day_count = 0
-        while current_date <= end_date:
-            temp_base = 80 + day_count * trend_factor * 20
-            vib_base = 0.5 + day_count * trend_factor * 0.1
-            
-            readings.append({
-                "reading_id": reading_id,
-                "aircraft_id": component['aircraft_id'],
-                "component_id": component['component_id'],
-                "parameter": "temperature",
-                "value": round(random.gauss(temp_base, 5), 2),
-                "unit": "Celsius",
-                "timestamp": current_date
-            })
-            reading_id += 1
-            readings.append({
-                "reading_id": reading_id,
-                "aircraft_id": component['aircraft_id'],
-                "component_id": component['component_id'],
-                "parameter": "vibration",
-                "value": round(random.gauss(vib_base, 0.1), 3),
-                "unit": "g",
-                "timestamp": current_date
-            })
-            reading_id += 1
-            current_date += timedelta(days=random.randint(1, 3)) # Reading every 1-3 days
-            day_count += 3
-            
-    # Chunking insert for large data
-    df = pd.DataFrame(readings)
-    df.to_sql('sensor_reading', engine, if_exists='append', index=False, chunksize=10000)
-
-def generate_maintenance_logs(components_df):
-    logs = []
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=DAYS_HISTORY)
-    
-    event_id = 1
-    for _, component in components_df.iterrows():
-        # Random number of maintenance events in the history
-        num_events = random.randint(0, 5)
-        for _ in range(num_events):
-            event_date = start_date + timedelta(days=random.randint(0, DAYS_HISTORY))
-            is_unscheduled = random.random() < 0.2
-            logs.append({
-                "maintenance_event_id": event_id,
-                "aircraft_id": component['aircraft_id'],
-                "component_id": component['component_id'],
-                "event_type": "Repair" if is_unscheduled else "Inspection",
-                "failure_mode": random.choice(["Wear and Tear", "Overheating", "Vibration", "Corrosion"]) if is_unscheduled else None,
-                "action_taken": "Replaced part" if is_unscheduled else "Lubricated and checked",
-                "unscheduled": is_unscheduled,
-                "event_timestamp": event_date
-            })
-            event_id += 1
-            
-    df = pd.DataFrame(logs)
-    df.to_sql('maintenance_log', engine, if_exists='append', index=False)
-
-def main():
+def generate_data():
     print("Clearing existing data...")
     with engine.connect() as con:
-        con.execute(text("TRUNCATE TABLE maintenance_priority CASCADE;"))
-        con.execute(text("TRUNCATE TABLE risk_score CASCADE;"))
-        con.execute(text("TRUNCATE TABLE failure_probability CASCADE;"))
-        con.execute(text("TRUNCATE TABLE component_features CASCADE;"))
-        con.execute(text("TRUNCATE TABLE flight_operation CASCADE;"))
-        con.execute(text("TRUNCATE TABLE sensor_reading CASCADE;"))
-        con.execute(text("TRUNCATE TABLE maintenance_log CASCADE;"))
-        con.execute(text("TRUNCATE TABLE component CASCADE;"))
-        con.execute(text("TRUNCATE TABLE aircraft CASCADE;"))
-        con.execute(text("TRUNCATE TABLE impact_score CASCADE;"))
+        tables = [
+            "maintenance_priority", "risk_trend", "risk_score", 
+            "component_features", "sensor_data", "maintenance_log", 
+            "flight_operations", "component", "aircraft"
+        ]
+        for table in tables:
+            con.execute(text(f"TRUNCATE TABLE {table} CASCADE;"))
         con.commit()
 
-    print("Generating impact scores...")
-    component_types = generate_impact_scores()
-    
-    print("Generating aircraft...")
-    aircraft_df = generate_aircraft()
-    
+    print(f"Generating {NUM_AIRCRAFT} aircraft...")
+    aircraft_list = []
+    types = ["Boeing 737", "Airbus A320", "Boeing 787", "Airbus A350"]
+    for i in range(1, NUM_AIRCRAFT + 1):
+        m_date = fake.date_between(start_date="-15y", end_date="-2y")
+        e_date = m_date + timedelta(days=random.randint(30, 180))
+        aircraft_list.append({
+            "aircraft_id": i,
+            "registration": f"N{random.randint(100, 999)}{fake.lexify('??').upper()}",
+            "type": random.choice(types),
+            "manufacture_date": m_date,
+            "fleet_entry_date": e_date,
+            "total_flight_hours": random.uniform(5000, 40000),
+            "total_flight_cycles": random.randint(2000, 15000),
+            "status": "ACTIVE"
+        })
+    df_ac = pd.DataFrame(aircraft_list)
+    df_ac.to_sql('aircraft', engine, if_exists='append', index=False)
+
     print("Generating components...")
-    components_df = generate_components(aircraft_df, component_types)
+    comp_types = [
+        ("Engine", "Turbofan"), ("Landing Gear", "Main Gear"), ("Avionics", "FMS"),
+        ("Hydraulics", "Pump"), ("APU", "GTCP131"), ("Brakes", "Carbon Brake"),
+        ("Fuel System", "Boost Pump"), ("Environmental", "Pack"),
+        ("Flight Controls", "Actuator"), ("Weather Radar", "RTA-4")
+    ]
     
-    print("Generating flight operations...")
-    generate_flight_operations(aircraft_df)
+    component_list = []
+    c_id = 1
+    for ac in aircraft_list:
+        for c_type, c_name in comp_types:
+            inst_date = ac['fleet_entry_date'] + timedelta(days=random.randint(0, 365))
+            component_list.append({
+                "component_id": c_id,
+                "aircraft_id": ac['aircraft_id'],
+                "component_type": c_type,
+                "name": f"{c_name} {fake.lexify('????').upper()}",
+                "installation_date": inst_date,
+                "age_hours": random.uniform(100, 10000),
+                "mtbf": random.uniform(5000, 20000),
+                "safety_impact": random.uniform(0.1, 1.0),
+                "operational_impact": random.uniform(0.1, 1.0),
+                "cost_impact": random.uniform(0.1, 1.0)
+            })
+            c_id += 1
+    df_comp = pd.DataFrame(component_list)
+    df_comp.to_sql('component', engine, if_exists='append', index=False)
+
+    print("Generating flight operations (1 year history)...")
+    flights = []
+    f_id = 1
+    for ac in aircraft_list:
+        curr = NOW - timedelta(days=HISTORY_DAYS)
+        while curr <= NOW:
+            if random.random() < 0.8: # 80% chance of flight per day
+                duration = random.uniform(1.0, 10.0)
+                flights.append({
+                    "flight_id": f_id,
+                    "aircraft_id": ac['aircraft_id'],
+                    "departure": fake.city(),
+                    "arrival": fake.city(),
+                    "duration_hours": duration,
+                    "departure_time": curr,
+                    "cycles_incremented": 1
+                })
+                f_id += 1
+            curr += timedelta(days=1)
+    pd.DataFrame(flights).to_sql('flight_operations', engine, if_exists='append', index=False)
+
+    print("Generating maintenance logs (History + Future Labels)...")
+    logs = []
+    l_id = 1
+    for comp in component_list:
+        # Generate 0-3 historical unscheduled events
+        num_hist = random.randint(0, 3)
+        for _ in range(num_hist):
+            m_date = NOW - timedelta(days=random.randint(1, HISTORY_DAYS))
+            logs.append({
+                "log_id": l_id,
+                "component_id": comp['component_id'],
+                "maintenance_date": m_date,
+                "type": "unscheduled",
+                "description": "Repaired component due to failure",
+                "outcome": "Resolved"
+            })
+            l_id += 1
+        
+        # Artificial "Future" failure for ground truth (20% chance)
+        if random.random() < 0.2:
+            m_date = NOW + timedelta(days=random.randint(1, LOOKAHEAD_DAYS))
+            logs.append({
+                "log_id": l_id,
+                "component_id": comp['component_id'],
+                "maintenance_date": m_date,
+                "type": "unscheduled",
+                "description": "Predicted failure occurred",
+                "outcome": "Pending"
+            })
+            l_id += 1
+    pd.DataFrame(logs).to_sql('maintenance_log', engine, if_exists='append', index=False)
+
+    print("Generating sensor data (last 30 days)...")
+    sensors = []
+    r_id = 1
+    for comp in component_list:
+        # Some components have a degrading trend
+        has_trend = random.random() < 0.3
+        slope = random.uniform(0.1, 0.5) if has_trend else random.uniform(-0.02, 0.02)
+        base_val = random.uniform(50, 100)
+        
+        curr = NOW - timedelta(days=30)
+        while curr <= NOW:
+            val = base_val + (slope * (curr - (NOW - timedelta(days=30))).days) + random.gauss(0, 2)
+            sensors.append({
+                "reading_id": r_id,
+                "component_id": comp['component_id'],
+                "sensor_type": "Health_Index",
+                "timestamp": curr,
+                "value": round(val, 2)
+            })
+            r_id += 1
+            curr += timedelta(days=random.randint(1, 3))
     
-    print("Generating sensor readings... (This may take a moment)")
-    generate_sensor_readings(components_df)
-    
-    print("Generating maintenance logs...")
-    generate_maintenance_logs(components_df)
-    
-    print("Synthetic data generation complete!")
+    # Batch insert sensors
+    df_sensors = pd.DataFrame(sensors)
+    df_sensors.to_sql('sensor_data', engine, if_exists='append', index=False, chunksize=1000)
+
+    print("Data generation complete.")
 
 if __name__ == "__main__":
-    main()
+    generate_data()

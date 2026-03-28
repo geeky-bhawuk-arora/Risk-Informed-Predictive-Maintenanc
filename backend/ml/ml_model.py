@@ -1,13 +1,19 @@
 import os
 import pandas as pd
+import numpy as np
 from sqlalchemy import create_engine, text
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import (
+    accuracy_score, roc_auc_score, precision_recall_curve, 
+    f1_score, brier_score_loss, auc
+)
 import mlflow
+import mlflow.sklearn
 import pickle
-from datetime import datetime
+from datetime import datetime, timedelta
 
 DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localhost:5432/risk_db")
 engine = create_engine(DB_URL)
@@ -15,81 +21,123 @@ engine = create_engine(DB_URL)
 def train_and_predict():
     print("Starting ML Model Training and Prediction...")
     
-    # 1. Load Data for Training
-    # Normally we'd use historical failures as labels. 
-    # For this synthetic case, we'll derive a label: did it fail in the last 30 days?
-    # To keep the simulation realistic for the predictive model, we'll artificially label components 
-    # with high vibration/temperature and older age as historical "failures" for training.
+    # 1. Load data
+    df_features = pd.read_sql("SELECT * FROM component_features", engine)
+    df_maint = pd.read_sql("SELECT component_id, maintenance_date, type FROM maintenance_log", engine)
     
-    query_features = "SELECT * FROM COMPONENT_FEATURES"
-    df = pd.read_sql(query_features, engine)
+    # 2. Derive labels (Ground Truth)
+    # Binary label: 1 if an unscheduled maintenance event occurs within 30 days of the observation
+    # Since we are using the 'current' snapshot, we check if there are future unscheduled events
+    # relative to the feature_timestamp. 
+    labels = []
+    for _, row in df_features.iterrows():
+        comp_id = row['component_id']
+        obs_time = pd.to_datetime(row['feature_timestamp'])
+        lookahead_limit = obs_time + timedelta(days=30)
+        
+        future_failures = df_maint[
+            (df_maint['component_id'] == comp_id) & 
+            (df_maint['type'].str.lower() == 'unscheduled') & 
+            (pd.to_datetime(df_maint['maintenance_date']) > obs_time) & 
+            (pd.to_datetime(df_maint['maintenance_date']) <= lookahead_limit)
+        ]
+        labels.append(1 if not future_failures.empty else 0)
     
-    # Synthetic label creation for demonstration purposes (since we don't have past features snapshots)
-    # Failure probability increases with: time since maint, avg temp > 90, high vib trend
-    df['label'] = ((df['time_since_last_maint'] > 60) | 
-                   (df['avg_temp_30d'] > 95) | 
-                   (df['vibration_trend'] > 0.05)).astype(int)
+    df_features['label'] = labels
     
-    # Map criticality
-    crit_map = {'Low': 0, 'Medium': 1, 'High': 2}
-    df['component_criticality_encoded'] = df['component_criticality'].map(crit_map).fillna(1)
-    
+    # Feature columns
     feature_cols = [
-        'time_since_last_maint', 'failure_count_90d', 'avg_temp_30d', 
-        'vibration_trend', 'usage_intensity', 'aircraft_age', 'component_criticality_encoded'
+        'days_since_last_maintenance', 'historical_failure_count', 'component_age_hours',
+        'sensor_mean_7d', 'sensor_std_7d', 'sensor_trend_slope',
+        'aircraft_age_years', 'flight_cycles_30d', 'utilization_intensity'
     ]
     
-    X = df[feature_cols].fillna(0)
-    y = df['label']
+    X = df_features[feature_cols].fillna(0)
+    y = df_features['label']
     
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Check class distribution
+    if y.sum() == 0:
+        print("Warning: No failures found in lookahead period. Using synthetic labels for demonstration.")
+        # Fallback to avoid training failure if generator hasn't produced future failures yet
+        y = ((X['sensor_mean_7d'] > X['sensor_mean_7d'].mean()) & (X['sensor_trend_slope'] > 0)).astype(int)
+
+    # 3. Train/Test Split (Stratified)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y if y.sum() > 1 else None
+    )
     
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
     X_all_scaled = scaler.transform(X)
     
-    mlflow.set_tracking_uri("sqlite:///mlflow.db")
-    mlflow.set_experiment("aircraft-failure-prediction")
+    mlflow.set_tracking_uri("http://mlflow:5000") # Docker service name
+    mlflow.set_experiment("RBAMPS-Engine")
     
     with mlflow.start_run():
-        model = LogisticRegression(random_state=42)
+        # Gradient Boosting (Primary)
+        model = GradientBoostingClassifier(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=42)
         model.fit(X_train_scaled, y_train)
         
-        preds = model.predict(X_test_scaled)
-        acc = accuracy_score(y_test, preds)
+        # Predictions
+        y_probs = model.predict_proba(X_test_scaled)[:, 1]
+        y_preds = (y_probs >= 0.3).astype(int) # Using threshold 0.3 as per spec
         
-        mlflow.log_metric("accuracy", acc)
-        mlflow.sklearn.log_model(model, "logistic_regression")
+        # Metrics
+        auc_roc = roc_auc_score(y_test, y_probs)
+        precision, recall, _ = precision_recall_curve(y_test, y_probs)
+        pr_auc = auc(recall, precision)
+        f1 = f1_score(y_test, y_preds)
+        brier = brier_score_loss(y_test, y_probs)
         
-        print(f"Model trained. Accuracy: {acc:.2f}")
+        # Log Hyperparameters
+        mlflow.log_params(model.get_params())
         
-        # Save model and scaler
+        # Log Metrics
+        mlflow.log_metric("auc_roc", auc_roc)
+        mlflow.log_metric("pr_auc", pr_auc)
+        mlflow.log_metric("f1_at_0.3", f1)
+        mlflow.log_metric("brier_score", brier)
+        
+        # Feature Importance
+        importances = model.feature_importances_
+        for i, val in enumerate(importances):
+            mlflow.log_metric(f"importance_{feature_cols[i]}", val)
+            
+        mlflow.sklearn.log_model(model, "gbm_model")
+        
+        # Save model and scaler locally
         os.makedirs("models", exist_ok=True)
         with open("models/model.pkl", "wb") as f:
             pickle.dump(model, f)
         with open("models/scaler.pkl", "wb") as f:
             pickle.dump(scaler, f)
-    
-    # Predict failure probability for the next 30 days
-    probs = model.predict_proba(X_all_scaled)[:, 1]
+            
+        print(f"Model trained. AUC-ROC: {auc_roc:.2f}, F1: {f1:.2f}")
+
+    # 4. Generate Predictions for all components
+    all_probs = model.predict_proba(X_all_scaled)[:, 1]
     
     df_preds = pd.DataFrame({
-        'aircraft_id': df['aircraft_id'],
-        'component_id': df['component_id'],
-        'prediction_horizon': 30,
-        'failure_probability': probs,
-        'model_version': 'logreg_v1',
-        'prediction_timestamp': pd.Timestamp.now()
+        'component_id': df_features['component_id'],
+        'failure_probability': all_probs,
+        'computed_at': pd.Timestamp.now()
     })
     
-    # Save to database
+    # Save to database (re-mapping to risk process)
     with engine.connect() as con:
-        con.execute(text("TRUNCATE TABLE FAILURE_PROBABILITY CASCADE;"))
+        con.execute(text("TRUNCATE TABLE risk_score RESTART IDENTITY;"))
         con.commit()
-        
-    df_preds.to_sql('failure_probability', engine, if_exists='append', index=False)
-    print(f"Predictions saved. {len(df_preds)} probability records inserted.")
+    
+    # We'll insert into risk_score directly here or let risk_engine handle it
+    # Risk engine expects failure_probability. Let's create a temp table or use the risk_score table.
+    # The spec says Risk engine computes Risk Score = P(failure) * Impact.
+    # So we'll save P(failure) somewhere.
+    df_preds.to_sql('risk_score', engine, if_exists='append', index=False)
+    print(f"Probabilities saved to risk_score table.")
+
+if __name__ == "__main__":
+    train_and_predict()
 
 if __name__ == "__main__":
     train_and_predict()
