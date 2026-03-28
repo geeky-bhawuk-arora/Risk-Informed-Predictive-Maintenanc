@@ -1,131 +1,114 @@
-import { useEffect, useState } from 'react';
-import { getFleetRisk, getFleet } from '../api';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
-import { AlertCircle, Plane, CheckCircle2 } from 'lucide-react';
-
-interface FleetRisk {
-    distribution: { Low: number; Medium: number; High: number };
-    probabilities: number[];
-}
-
-interface Aircraft {
-    aircraft_id: number;
-    tail_number: string;
-    aircraft_model: string;
-    status: string;
-    high_risk_components: number;
-}
+import React, { useState, useEffect } from 'react';
+import { fleetApi } from '../api';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area 
+} from 'recharts';
+import { Plane, Activity, AlertCircle, Clock, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function FleetOverview() {
-    const [risk, setRisk] = useState<FleetRisk | null>(null);
-    const [fleet, setFleet] = useState<Aircraft[]>([]);
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        getFleetRisk().then(res => setRisk(res.data));
-        getFleet().then(res => setFleet(res.data));
-    }, []);
+  useEffect(() => {
+    fleetApi.getOverview().then(res => {
+      setData(res.data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
 
-    if (!risk) return <div className="text-slate-400 animate-pulse">Loading fleet telemetry...</div>;
+  if (loading) return <div className="animate-pulse flex space-y-4 flex-col pt-20"><div className="h-40 glass-card"></div><div className="h-80 glass-card"></div></div>;
 
-    const distData = [
-        { name: 'Low Risk', value: risk.distribution.Low, color: '#10b981' }, // green-500
-        { name: 'Medium Risk', value: risk.distribution.Medium, color: '#f59e0b' }, // amber-500
-        { name: 'High Risk', value: risk.distribution.High, color: '#ef4444' } // red-500
-    ];
+  const stats = [
+    { label: 'Total Aircraft', value: data?.total_aircraft || 0, icon: Plane, color: 'text-blue-500' },
+    { label: 'Avg Fleet Health', value: `${((data?.avg_health || 0) * 100).toFixed(1)}%`, icon: Activity, color: 'text-green-500' },
+    { label: 'Pending Critical', value: data?.critical_count || 0, icon: AlertCircle, color: 'text-red-500' },
+    { label: 'Maintenance Due', value: data?.maintenance_due || 0, icon: Clock, color: 'text-amber-500' },
+  ];
 
-    const totalAircraft = fleet.length;
-    const aircraftWithHighRisk = fleet.filter(a => a.high_risk_components > 0).length;
-
-    return (
-        <div className="space-y-6">
-            <header className="mb-8">
-                <h2 className="text-3xl font-bold text-white tracking-tight">Fleet Overview</h2>
-                <p className="text-slate-400 mt-2">Real-time risk assessment and predictive analytics for the total fleet.</p>
-            </header>
-
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="glass-panel p-6 flex flex-col">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-slate-400 font-medium">Total Aircraft</h3>
-                        <Plane className="text-primary" size={24} />
-                    </div>
-                    <div className="text-4xl font-bold text-white mt-4">{totalAircraft}</div>
-                </div>
-
-                <div className="glass-panel p-6 flex flex-col ring-1 ring-red-500/20">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-slate-400 font-medium">Aircraft at Risk</h3>
-                        <AlertCircle className="text-red-500" size={24} />
-                    </div>
-                    <div className="text-4xl font-bold text-white mt-4">{aircraftWithHighRisk}</div>
-                    <p className="text-sm text-red-400/80 mt-2">{((aircraftWithHighRisk / (totalAircraft || 1)) * 100).toFixed(1)}% of fleet requires immediate attention</p>
-                </div>
-
-                <div className="glass-panel p-6 flex flex-col">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-slate-400 font-medium">System Status</h3>
-                        <CheckCircle2 className="text-emerald-500" size={24} />
-                    </div>
-                    <div className="text-4xl font-bold text-white mt-4">Optimal</div>
-                    <p className="text-sm text-emerald-400/80 mt-2">Risk engine is continuously monitoring</p>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-                {/* Risk Distribution Chart */}
-                <div className="glass-panel p-6">
-                    <h3 className="text-lg font-semibold text-white mb-6">Component Risk Distribution</h3>
-                    <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={distData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={90}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                >
-                                    {distData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} stroke="rgba(0,0,0,0)" />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
-                                    itemStyle={{ color: '#f8fafc' }}
-                                />
-                                <Legend />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-
-                {/* High Risk Aircraft List */}
-                <div className="glass-panel p-6 flex flex-col">
-                    <h3 className="text-lg font-semibold text-white mb-6">Aircraft Needing Attention</h3>
-                    <div className="flex-1 overflow-y-auto">
-                        {fleet.filter(a => a.high_risk_components > 0).map(a => (
-                            <div key={a.aircraft_id} className="flex items-center justify-between p-3 border-b border-slate-700/30 last:border-0 hover:bg-slate-700/20 transition-colors rounded-lg">
-                                <div className="flex items-center space-x-3">
-                                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-                                    <div>
-                                        <div className="font-medium text-slate-200">{a.tail_number}</div>
-                                        <div className="text-xs text-slate-400">{a.aircraft_model}</div>
-                                    </div>
-                                </div>
-                                <div className="text-sm font-semibold text-red-400 bg-red-500/10 px-3 py-1 rounded-full">
-                                    {a.high_risk_components} High Risk
-                                </div>
-                            </div>
-                        ))}
-                        {fleet.filter(a => a.high_risk_components > 0).length === 0 && (
-                            <div className="text-center text-slate-500 mt-8">No high-risk aircraft detected.</div>
-                        )}
-                    </div>
-                </div>
-            </div>
+  return (
+    <div className="space-y-8 animate-fade-in">
+      <header className="flex justify-between items-end">
+        <div>
+          <p className="text-blue-500 font-bold tracking-widest uppercase text-xs mb-2">Dashboard</p>
+          <h1 className="text-4xl font-black text-white">Fleet Overview</h1>
         </div>
-    );
+        <div className="flex gap-4">
+          <button className="glass px-6 py-2 rounded-xl text-sm font-bold text-slate-300 hover:text-white transition-all">
+            Export Report
+          </button>
+        </div>
+      </header>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {stats.map((stat, i) => (
+          <div key={i} className="glass-card hover:translate-y-[-4px]">
+            <div className={`w-10 h-10 rounded-xl mb-4 flex items-center justify-center bg-white/5 ${stat.color}`}>
+              <stat.icon size={20} />
+            </div>
+            <p className="text-slate-500 text-sm font-semibold">{stat.label}</p>
+            <p className="text-3xl font-black text-white mt-1">{stat.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Risk Trend Chart */}
+        <div className="lg:col-span-2 glass-card h-[400px] flex flex-col">
+          <h3 className="text-xl font-bold mb-6 text-white">7-Day Risk Projection</h3>
+          <div className="flex-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data?.risk_trend || []}>
+                <defs>
+                  <linearGradient id="colorRisk" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#111116', border: '1px solid #ffffff10', borderRadius: '12px' }}
+                  itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                />
+                <Area type="monotone" dataKey="risk" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorRisk)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Aircraft Status List */}
+        <div className="glass-card flex flex-col h-[400px]">
+          <h3 className="text-xl font-bold mb-6 text-white">Fleet Distribution</h3>
+          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+            {data?.aircraft_status?.map((ac: any) => (
+              <Link 
+                key={ac.id} 
+                to={`/aircraft/${ac.id}`}
+                className="flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-600/10 flex items-center justify-center text-blue-400 font-bold group-hover:scale-110 transition-transform">
+                    {ac.registration.slice(-2)}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-100">{ac.registration}</p>
+                    <p className="text-xs text-slate-500 uppercase font-black">{ac.type}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className={`status-badge ${ac.health > 0.8 ? 'status-low' : ac.health > 0.5 ? 'status-med' : 'status-high'}`}>
+                    {Math.round(ac.health * 100)}%
+                  </div>
+                  <ChevronRight size={16} className="text-slate-600 group-hover:text-white transition-colors" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

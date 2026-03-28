@@ -1,128 +1,131 @@
-import { useEffect, useState } from 'react';
-import { getPriorities } from '../api';
-import { AlertTriangle, Wrench, ShieldCheck, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { componentsApi, adminApi } from '../api';
+import { AlertCircle, Clock, CheckCircle, Download, RefreshCw, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
-interface PriorityItem {
-    rank: number;
-    aircraft_tail: string;
-    component_type: string;
-    component_id: number;
-    risk_score: number;
-    action: string;
-    reasoning: string;
-}
+export default function PriorityBoard() {
+  const [rankings, setRankings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-export default function PriorityBoard({ onSelectComponent }: { onSelectComponent: (id: number) => void }) {
-    const [items, setItems] = useState<PriorityItem[]>([]);
-    const [filter, setFilter] = useState<'All' | 'High' | 'Medium' | 'Low'>('All');
+  const fetchRankings = () => {
+    setLoading(true);
+    componentsApi.getRankings().then(res => {
+      setRankings(res.data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
 
-    useEffect(() => {
-        getPriorities().then(res => setItems(res.data));
-    }, []);
+  useEffect(() => {
+    fetchRankings();
+  }, []);
 
-    const getRiskLevel = (score: number) => {
-        if (score > 0.6) return 'High';
-        if (score > 0.3) return 'Medium';
-        return 'Low';
-    };
+  const handleSync = async () => {
+    setIsSyncing(true);
+    await adminApi.regenerateData();
+    fetchRankings();
+    setIsSyncing(false);
+  };
 
-    const filteredItems = items.filter(item => {
-        if (filter === 'All') return true;
-        return getRiskLevel(item.risk_score) === filter;
-    });
+  const getTier = (score: number) => {
+    if (score >= 0.6) return 'HIGH';
+    if (score >= 0.3) return 'MEDIUM';
+    return 'LOW';
+  };
 
-    const getRiskIcon = (level: string) => {
-        switch (level) {
-            case 'High': return <AlertTriangle className="text-red-500" size={20} />;
-            case 'Medium': return <Wrench className="text-amber-500" size={20} />;
-            default: return <ShieldCheck className="text-emerald-500" size={20} />;
-        }
-    };
+  const tiers = [
+    { id: 'HIGH', label: 'Critical Action', color: 'bg-red-500', icon: AlertCircle, desc: 'Inspection within 24h' },
+    { id: 'MEDIUM', label: 'Scheduled', color: 'bg-amber-500', icon: Clock, desc: 'Service within 7d' },
+    { id: 'LOW', label: 'Monitoring', color: 'bg-green-500', icon: CheckCircle, desc: 'Normal Operation' },
+  ];
 
-    return (
-        <div className="space-y-6">
-            <header className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
-                <div>
-                    <h2 className="text-3xl font-bold text-white tracking-tight">Maintenance Priority Board</h2>
-                    <p className="text-slate-400 mt-2">Ranked list of components requiring attention based on computed risk scores.</p>
-                </div>
+  if (loading) return <div className="grid grid-cols-3 gap-6 pt-20 animate-pulse"><div className="h-96 glass-card"></div><div className="h-96 glass-card"></div><div className="h-96 glass-card"></div></div>;
 
-                <div className="flex bg-slate-800/80 p-1 rounded-lg border border-slate-700/50">
-                    {(['All', 'High', 'Medium', 'Low'] as const).map(f => (
-                        <button
-                            key={f}
-                            onClick={() => setFilter(f)}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${filter === f
-                                    ? 'bg-slate-700 text-white shadow'
-                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
-                                }`}
-                        >
-                            {f}
-                        </button>
-                    ))}
-                </div>
-            </header>
-
-            <div className="glass-panel overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-slate-800/80 text-slate-400 border-b border-slate-700/50 text-sm">
-                                <th className="p-4 font-semibold w-16 text-center">Rank</th>
-                                <th className="p-4 font-semibold">Aircraft</th>
-                                <th className="p-4 font-semibold">Component</th>
-                                <th className="p-4 font-semibold">Risk Level</th>
-                                <th className="p-4 font-semibold">Action Required</th>
-                                <th className="p-4 font-semibold w-16"></th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-700/30">
-                            {filteredItems.map(item => {
-                                const level = getRiskLevel(item.risk_score);
-                                const scorePercent = (item.risk_score * 100).toFixed(1);
-
-                                return (
-                                    <tr
-                                        key={`${item.aircraft_tail}-${item.component_id}`}
-                                        onClick={() => onSelectComponent(item.component_id)}
-                                        className="hover:bg-slate-700/30 transition-colors cursor-pointer group"
-                                    >
-                                        <td className="p-4 text-center font-bold text-slate-500">#{item.rank}</td>
-                                        <td className="p-4 font-medium text-slate-200">{item.aircraft_tail}</td>
-                                        <td className="p-4">{item.component_type}</td>
-                                        <td className="p-4">
-                                            <div className="flex items-center space-x-2">
-                                                {getRiskIcon(level)}
-                                                <span className={`font-semibold ${level === 'High' ? 'text-red-400' :
-                                                        level === 'Medium' ? 'text-amber-400' : 'text-emerald-400'
-                                                    }`}>
-                                                    {level} ({scorePercent}%)
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="text-sm text-slate-200 font-medium">{item.action}</div>
-                                            <div className="text-xs text-slate-400 mt-1 truncate max-w-xs">{item.reasoning}</div>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <button className="p-2 bg-slate-700/50 rounded-lg text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary hover:text-white">
-                                                <ChevronRight size={18} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                            {filteredItems.length === 0 && (
-                                <tr>
-                                    <td colSpan={6} className="p-8 text-center text-slate-500">
-                                        No components found matching the selected filter.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+  return (
+    <div className="space-y-8 animate-fade-in">
+      <header className="flex justify-between items-end">
+        <div>
+          <p className="text-blue-500 font-bold tracking-widest uppercase text-xs mb-2">Maintenance Ops</p>
+          <h1 className="text-4xl font-black text-white">Priority Board</h1>
         </div>
-    );
+        <div className="flex gap-4">
+          <button 
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="glass px-6 py-2 rounded-xl text-sm font-bold text-slate-300 hover:text-white transition-all flex items-center gap-2 outline-none border-none cursor-pointer"
+          >
+            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+            {isSyncing ? 'Recomputing...' : 'Recompute Risk'}
+          </button>
+          <a 
+            href={componentsApi.exportCSV()} 
+            className="btn-primary flex items-center gap-2 no-underline text-sm font-bold"
+          >
+            <Download size={16} />
+            Export CSV
+          </a>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {tiers.map(tier => (
+          <div key={tier.id} className="flex flex-col gap-6">
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-3">
+                <div className={`w-3 h-3 rounded-full ${tier.color} shadow-[0_0_10px_currentColor]`}></div>
+                <h3 className="text-xl font-bold text-white uppercase tracking-tighter">{tier.label}</h3>
+              </div>
+              <span className="text-slate-500 font-black text-sm">
+                {rankings.filter(r => getTier(r.risk_score) === tier.id).length}
+              </span>
+            </div>
+            
+            <div className="flex flex-col gap-4">
+              {rankings
+                .filter(r => getTier(r.risk_score) === tier.id)
+                .map(item => (
+                  <Link 
+                    key={item.component_id}
+                    to={`/component/${item.component_id}`}
+                    className="glass-card !p-5 group hover:border-white/20 hover:bg-white/5 no-underline block"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="max-w-[180px]">
+                        <p className="font-black text-white group-hover:text-blue-400 transition-colors uppercase tracking-tight text-sm truncate">
+                          {item.component_name}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-black">{item.aircraft_registration}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-black text-white tracking-tighter">{(item.risk_score * 100).toFixed(0)}</p>
+                        <p className="text-[8px] text-slate-500 font-black uppercase tracking-widest -mt-1">RiskIdx</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-2 mb-4">
+                      <div className="bg-white/5 rounded-lg p-2 text-center">
+                        <p className="text-[8px] text-slate-500 font-bold uppercase truncate">Fail P</p>
+                        <p className="text-xs font-black text-slate-200">{(item.failure_probability * 100).toFixed(0)}%</p>
+                      </div>
+                      <div className="bg-white/5 rounded-lg p-2 text-center col-span-2">
+                        <p className="text-[8px] text-slate-500 font-bold uppercase truncate">Primary Impact</p>
+                        <p className="text-xs font-black text-slate-200 truncate">{item.component_type}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 border-t border-white/5 pt-3">
+                      <div className="flex items-center gap-2">
+                        <tier.icon size={12} className={tier.color.replace('bg-', 'text-')} />
+                        <span className="uppercase tracking-widest">{tier.desc}</span>
+                      </div>
+                      <ChevronRight size={12} />
+                    </div>
+                  </Link>
+                ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
