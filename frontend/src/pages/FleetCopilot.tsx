@@ -41,60 +41,56 @@ export default function FleetCopilot() {
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.8fr] gap-8 pb-16">
-      <section className="rounded-[2rem] border border-white/10 bg-slate-950/80 backdrop-blur-2xl overflow-hidden shadow-[0_30px_120px_rgba(0,0,0,0.45)]">
-        <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.16),_transparent_30%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(2,6,23,0.92))] p-8">
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_0.85fr] pb-12">
+      <section className="surface-card overflow-hidden">
+        <div className="border-b border-slate-200 bg-slate-50 p-6 md:p-8">
           <div className="flex items-start justify-between gap-6">
             <div className="space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-1 text-xs font-black uppercase tracking-[0.28em] text-cyan-300">
+              <div className="inline-flex items-center gap-2 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
                 <Sparkles className="h-3.5 w-3.5" />
                 Fleet Copilot
               </div>
-              <h1 className="text-4xl font-black tracking-tight text-white">Ask your maintenance data like an analyst.</h1>
-              <p className="max-w-2xl text-sm leading-6 text-slate-300">
-                This copilot reads the live RBAMPS fleet, risk, and component data and answers operational questions in plain language.
+              <h1 className="page-title">Ask your maintenance data in plain language.</h1>
+              <p className="page-subtitle max-w-2xl">
+                Use Copilot to summarize fleet conditions, identify top-risk items, compare aircraft types, or explain a specific component.
               </p>
             </div>
-            <div className="hidden md:flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-cyan-300">
-              <Bot className="h-8 w-8" />
+            <div className="hidden md:flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-600 text-white">
+              <Bot className="h-7 w-7" />
             </div>
           </div>
         </div>
 
-        <div className="space-y-5 p-6 md:p-8">
-          <div className="space-y-4 max-h-[28rem] overflow-y-auto pr-2">
+        <div className="p-6 md:p-8 space-y-5">
+          <div className="max-h-[28rem] space-y-4 overflow-y-auto pr-2">
             {messages.map((message, index) => (
               <div
                 key={`${message.role}-${index}`}
-                className={`max-w-[90%] rounded-3xl px-5 py-4 text-sm leading-6 ${
+                className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-6 ${
                   message.role === 'user'
-                    ? 'ml-auto bg-cyan-500 text-slate-950'
-                    : 'bg-slate-900/80 text-slate-100 border border-white/10'
+                    ? 'ml-auto bg-sky-600 text-white'
+                    : 'border border-slate-200 bg-slate-50 text-slate-800'
                 }`}
               >
                 {message.text}
               </div>
             ))}
             {loading && (
-              <div className="max-w-[90%] rounded-3xl border border-white/10 bg-slate-900/80 px-5 py-4 text-sm text-slate-300">
+              <div className="max-w-[90%] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                 Analyzing the current fleet state...
               </div>
             )}
           </div>
 
-          <div className="rounded-[1.75rem] border border-white/10 bg-slate-900/70 p-3">
+          <div className="surface-muted p-3">
             <div className="flex flex-col gap-3 md:flex-row">
               <textarea
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 placeholder="Ask about fleet risk, top components, aircraft types, tier changes, or a component ID..."
-                className="min-h-[88px] flex-1 resize-none rounded-[1.25rem] border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-400/40"
+                className="input-clean min-h-[96px] resize-none"
               />
-              <button
-                onClick={() => submitQuestion()}
-                disabled={loading}
-                className="inline-flex items-center justify-center gap-2 rounded-[1.25rem] bg-cyan-400 px-5 py-4 font-bold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60 md:self-stretch"
-              >
+              <button onClick={() => submitQuestion()} disabled={loading} className="button-primary md:self-stretch">
                 <Send className="h-4 w-4" />
                 Ask
               </button>
@@ -104,10 +100,10 @@ export default function FleetCopilot() {
       </section>
 
       <aside className="space-y-6">
-        <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-6 backdrop-blur-2xl">
-          <div className="mb-4 flex items-center gap-3 text-white">
-            <Radar className="h-5 w-5 text-cyan-300" />
-            <h2 className="text-lg font-bold">Suggested Questions</h2>
+        <div className="surface-card p-5">
+          <div className="mb-4 flex items-center gap-3">
+            <Radar className="h-5 w-5 text-sky-600" />
+            <h2 className="text-lg font-semibold text-slate-900">Suggested Questions</h2>
           </div>
           <div className="space-y-3">
             {starterQuestions.map((item) => (
@@ -117,7 +113,7 @@ export default function FleetCopilot() {
                   setQuestion(item);
                   submitQuestion(item);
                 }}
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-slate-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/10"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
               >
                 {item}
               </button>
@@ -125,30 +121,30 @@ export default function FleetCopilot() {
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-white/10 bg-slate-950/80 p-6 backdrop-blur-2xl">
-          <div className="mb-4 flex items-center gap-3 text-white">
-            <AlertTriangle className="h-5 w-5 text-amber-300" />
-            <h2 className="text-lg font-bold">Latest Structured Output</h2>
+        <div className="surface-card p-5">
+          <div className="mb-4 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600" />
+            <h2 className="text-lg font-semibold text-slate-900">Latest Structured Output</h2>
           </div>
           {!responseData ? (
-            <p className="text-sm leading-6 text-slate-400">Your latest answer will also appear here in structured form for quick review.</p>
+            <p className="text-sm text-slate-600">The latest answer will also appear here in structured form for quick review.</p>
           ) : (
             <div className="space-y-3">
-              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Intent</div>
-                <div className="mt-2 text-sm font-semibold text-white">{responseData.intent}</div>
+              <div className="surface-muted px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Intent</div>
+                <div className="mt-2 text-sm font-semibold text-slate-900">{responseData.intent}</div>
               </div>
               {responseData.data?.components && (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="mb-3 text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Top Components</div>
+                <div className="surface-muted p-4">
+                  <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Top Components</div>
                   <div className="space-y-2">
                     {responseData.data.components.map((item: any) => (
                       <div key={item.component_id} className="flex items-center justify-between gap-4 text-sm">
                         <div>
-                          <div className="font-semibold text-white">{item.name}</div>
-                          <div className="text-slate-400">{item.system_category}</div>
+                          <div className="font-semibold text-slate-900">{item.name}</div>
+                          <div className="text-slate-500">{item.system_category}</div>
                         </div>
-                        <div className="font-mono text-cyan-300">{item.risk_score.toFixed(3)}</div>
+                        <div className="font-mono text-sky-700">{item.risk_score.toFixed(3)}</div>
                       </div>
                     ))}
                   </div>
@@ -172,9 +168,9 @@ export default function FleetCopilot() {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">{label}</div>
-      <div className="mt-2 text-lg font-bold text-white">{value}</div>
+    <div className="surface-muted px-4 py-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-2 text-lg font-semibold text-slate-900">{value}</div>
     </div>
   );
 }

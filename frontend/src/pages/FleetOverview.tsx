@@ -1,20 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import {
-  AlertCircle,
-  Timer,
-  RefreshCw,
-  Database,
-  Plane,
-  ShieldAlert,
-  Calendar,
-  Bot,
-  ChevronRight,
-  Radar,
-} from 'lucide-react';
-import {
-  PieChart, Pie, Cell, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend
-} from 'recharts';
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, Timer, RefreshCw, Database, Plane, ShieldAlert, Calendar, Bot } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { Link } from 'react-router-dom';
 import { fleetApi, settingsApi } from '../api';
 
@@ -27,10 +13,7 @@ const FleetOverview = () => {
   const fetchData = async () => {
     try {
       setIsRefreshing(true);
-      const [overview, bd] = await Promise.all([
-        fleetApi.getOverview(),
-        fleetApi.getBreakdown(),
-      ]);
+      const [overview, bd] = await Promise.all([fleetApi.getOverview(), fleetApi.getBreakdown()]);
       setData(overview);
       setBreakdown(bd);
       setCountdown(60);
@@ -62,134 +45,112 @@ const FleetOverview = () => {
     }
   };
 
-  if (!data) return <div className="h-96 flex items-center justify-center animate-pulse">Loading Fleet Intelligence...</div>;
+  if (!data) return <div className="h-96 flex items-center justify-center text-slate-500">Loading fleet overview...</div>;
 
-  const colors = ['#f43f5e', '#fbbf24', '#10b981'];
   const pieData = [
     { name: 'High', value: data.high_risk_components },
     { name: 'Medium', value: data.medium_risk_components },
     { name: 'Low', value: data.low_risk_components },
   ];
+  const colors = ['#ef4444', '#f59e0b', '#10b981'];
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.14),transparent_28%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(2,6,23,0.92))] p-8 md:p-10 shadow-[0_30px_90px_rgba(0,0,0,0.45)]">
-        <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
+    <div className="space-y-6">
+      <section className="surface-card p-6 md:p-8">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-1 text-[11px] font-black uppercase tracking-[0.32em] text-cyan-300">
-              <Radar className="h-3.5 w-3.5" />
-              Fleet intelligence
+            <div className="text-sm font-semibold text-sky-700">Maintenance operations overview</div>
+            <h1 className="mt-2 page-title">Prioritize fleet risk with clear operational decisions.</h1>
+            <p className="mt-3 max-w-2xl page-subtitle">
+              Review current fleet health, high-priority maintenance items, exposure by aircraft type, and system-wide trends from one place.
+            </p>
+            <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-600">
+              <Timer className="h-4 w-4" />
+              Live refresh in {countdown}s
             </div>
-            <h1 className="mt-4 text-4xl font-black tracking-tight text-white md:text-5xl">
-              Risk-based maintenance command for an academic flagship demo.
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
-              RBAMPS blends predictive failure probability with weighted operational impact to rank maintenance actions across the fleet in real time.
-            </p>
-            <p className="mt-4 flex items-center gap-2 text-sm text-slate-400">
-              <Timer className="w-4 h-4" />
-              Live data sync in {countdown}s
-            </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:w-[26rem]">
-            <button
-              onClick={fetchData}
-              disabled={isRefreshing}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm font-bold text-white transition hover:bg-white/10 disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Refresh now
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button onClick={fetchData} disabled={isRefreshing} className="button-secondary">
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
             </button>
-            <button
-              onClick={handleRegenerate}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-cyan-300"
-            >
-              <Database className="w-4 h-4" />
-              Regenerate data
+            <button onClick={handleRegenerate} className="button-primary">
+              <Database className="h-4 w-4" />
+              Regenerate
             </button>
-            <Link
-              to="/copilot"
-              className="sm:col-span-2 inline-flex items-center justify-between rounded-[1.5rem] border border-cyan-400/20 bg-cyan-400/10 px-5 py-4 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/15"
-            >
+            <Link to="/copilot" className="surface-muted sm:col-span-2 flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
               <span className="inline-flex items-center gap-2">
-                <Bot className="h-4 w-4" />
-                Ask Fleet Copilot about your live data
+                <Bot className="h-4 w-4 text-sky-600" />
+                Ask Fleet Copilot
               </span>
-              <ChevronRight className="h-4 w-4" />
+              <span className="text-sky-700">Open</span>
             </Link>
           </div>
         </div>
       </section>
 
       {data.tier_changes > 0 && (
-        <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 flex items-center justify-between gap-4 animate-bounce-subtle">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-rose-500/20 rounded-full flex items-center justify-center">
-              <ShieldAlert className="w-6 h-6 text-rose-500" />
-            </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+          <div className="flex items-center gap-3">
+            <ShieldAlert className="h-5 w-5 text-amber-600" />
             <div>
-              <h3 className="text-rose-400 font-bold">Critical Maintenance Escalation</h3>
-              <p className="text-rose-400/70 text-sm">{data.tier_changes} components moved to HIGH priority since last snapshot.</p>
+              <div className="font-semibold">New high-priority escalations detected</div>
+              <div className="text-sm text-amber-800">{data.tier_changes} components moved into HIGH priority since the last snapshot.</div>
             </div>
           </div>
-          <Link to="/priorities" className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-bold transition-colors">
-            Review priorities
-          </Link>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Fleet Health" value={data.fleet_health_score} suffix="%" sub="Risk-adjusted readiness" color="blue" isGauge />
-        <StatCard title="Active Aircraft" value={data.total_aircraft} icon={Plane} sub="Fleet assets in scope" color="slate" />
-        <StatCard title="High Priority" value={data.high_risk_components} icon={AlertCircle} sub="Immediate response band" color="rose" />
-        <StatCard title="Scheduled" value={data.medium_risk_components} icon={Calendar} sub="Next 7 day response band" color="amber" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard title="Fleet Health" value={`${data.fleet_health_score}%`} sub="Overall readiness" icon={Plane} />
+        <StatCard title="Aircraft" value={`${data.total_aircraft}`} sub="In monitored fleet" icon={Plane} />
+        <StatCard title="High Priority" value={`${data.high_risk_components}`} sub="Immediate attention" icon={AlertCircle} accent="rose" />
+        <StatCard title="Scheduled" value={`${data.medium_risk_components}`} sub="Plan within 7 days" icon={Calendar} accent="amber" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-slate-900/50 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
-          <h3 className="text-lg font-bold text-white mb-6">Priority Distribution</h3>
-          <div className="h-64">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="surface-card p-6">
+          <h2 className="text-lg font-semibold text-slate-900">Priority Distribution</h2>
+          <div className="mt-4 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={pieData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" startAngle={90} endAngle={450}>
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                  ))}
+                <Pie data={pieData} dataKey="value" innerRadius={55} outerRadius={82} paddingAngle={4}>
+                  {pieData.map((entry, index) => <Cell key={entry.name} fill={colors[index]} />)}
                 </Pie>
-                <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155' }} itemStyle={{ color: '#fff' }} />
-                <Legend layout="vertical" align="right" verticalAlign="middle" />
+                <Tooltip />
+                <Legend />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="lg:col-span-2 bg-slate-900/50 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
-          <h3 className="text-lg font-bold text-white mb-6">Risk by Aircraft Model</h3>
-          <div className="h-64">
+        <div className="surface-card p-6 xl:col-span-2">
+          <h2 className="text-lg font-semibold text-slate-900">Average Risk by Aircraft Type</h2>
+          <div className="mt-4 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={breakdown?.by_type}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff10" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis dataKey="name" fontSize={12} stroke="#64748b" axisLine={false} tickLine={false} />
                 <YAxis fontSize={12} stroke="#64748b" axisLine={false} tickLine={false} />
-                <Tooltip cursor={{ fill: '#33415550' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155' }} />
-                <Bar dataKey="avg_risk" fill="#22d3ee" radius={[4, 4, 0, 0]} barSize={40} />
+                <Tooltip />
+                <Bar dataKey="avg_risk" fill="#0284c7" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       </div>
 
-      <div className="bg-slate-900/50 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
-        <h3 className="text-lg font-bold text-white mb-6">Risk Exposure by Climate Zone</h3>
-        <div className="h-80">
+      <div className="surface-card p-6">
+        <h2 className="text-lg font-semibold text-slate-900">Risk Exposure by Climate Zone</h2>
+        <div className="mt-4 h-80">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={breakdown?.by_zone} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#ffffff10" />
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
               <XAxis type="number" fontSize={12} stroke="#64748b" axisLine={false} tickLine={false} />
-              <YAxis dataKey="name" type="category" width={100} fontSize={12} stroke="#64748b" axisLine={false} tickLine={false} />
-              <Tooltip cursor={{ fill: '#33415550' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155' }} />
-              <Bar dataKey="avg_risk" fill="#10b981" radius={[0, 4, 4, 0]} barSize={30} />
+              <YAxis dataKey="name" type="category" width={110} fontSize={12} stroke="#64748b" axisLine={false} tickLine={false} />
+              <Tooltip />
+              <Bar dataKey="avg_risk" fill="#0f766e" radius={[0, 6, 6, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -198,34 +159,25 @@ const FleetOverview = () => {
   );
 };
 
-const StatCard = ({ title, value, sub, icon: Icon, color, suffix, isGauge }: any) => {
-  const colorMap: any = {
-    blue: 'text-blue-500 bg-blue-500/10 border-blue-500/20',
-    rose: 'text-rose-500 bg-rose-500/10 border-rose-500/20',
-    amber: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
-    slate: 'text-slate-400 bg-slate-400/10 border-slate-400/20',
+const StatCard = ({ title, value, sub, icon: Icon, accent = 'sky' }: any) => {
+  const accentMap: any = {
+    sky: 'bg-sky-50 text-sky-700',
+    rose: 'bg-rose-50 text-rose-700',
+    amber: 'bg-amber-50 text-amber-700',
   };
 
   return (
-    <div className="bg-slate-900/50 border border-white/10 rounded-3xl p-6 backdrop-blur-xl group hover:border-white/20 transition-all">
-      <div className="flex justify-between items-start mb-4">
-        <span className="text-slate-400 font-medium text-sm">{title}</span>
-        {Icon && <Icon className={`w-5 h-5 ${colorMap[color].split(' ')[0]}`} />}
-      </div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-4xl font-bold tracking-tight text-white">
-          {value}{suffix}
-        </span>
-      </div>
-      <p className="text-slate-500 text-xs mt-2 uppercase font-semibold tracking-wider">{sub}</p>
-
-      {isGauge && (
-        <div className="mt-4 pt-4 border-t border-white/5 flex gap-1">
-          <div className={`h-1 flex-1 rounded-full ${value > 70 ? 'bg-emerald-500' : 'bg-slate-800'}`}></div>
-          <div className={`h-1 flex-1 rounded-full ${value > 40 ? 'bg-amber-500' : 'bg-slate-800'}`}></div>
-          <div className={`h-1 flex-1 rounded-full ${value <= 40 ? 'bg-rose-500' : 'bg-slate-800'}`}></div>
+    <div className="surface-card p-5">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-sm font-medium text-slate-500">{title}</div>
+          <div className="mt-2 text-3xl font-semibold text-slate-900">{value}</div>
+          <div className="mt-1 text-sm text-slate-600">{sub}</div>
         </div>
-      )}
+        <div className={`rounded-xl p-2 ${accentMap[accent]}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
     </div>
   );
 };

@@ -2,10 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: light;
+}
+
 @layer base {
+  html {
+    @apply bg-slate-100;
+  }
+
   body {
-    @apply bg-slate-950 text-slate-100 selection:bg-blue-500/30 selection:text-blue-200 antialiased;
+    @apply bg-slate-100 text-slate-900 antialiased;
     font-feature-settings: "cv02", "cv05", "cv11";
+    font-family: "Segoe UI", "Inter", system-ui, sans-serif;
+  }
+
+  * {
+    @apply border-slate-200;
+  }
+}
+
+@layer components {
+  .surface-card {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .surface-muted {
+    @apply rounded-2xl border border-slate-200 bg-slate-50;
+  }
+
+  .page-title {
+    @apply text-3xl font-semibold tracking-tight text-slate-900;
+  }
+
+  .page-subtitle {
+    @apply text-sm text-slate-600;
+  }
+
+  .input-clean {
+    @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100;
+  }
+
+  .button-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700;
+  }
+
+  .button-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50;
   }
 }
 
@@ -13,67 +56,40 @@
   .animate-spin-slow {
     animation: spin 6s linear infinite;
   }
-  
+
   .animate-fade-in {
-    animation: fadeIn 0.8s ease-out forwards;
+    animation: fadeIn 0.5s ease-out forwards;
   }
-  
+
   .animate-bounce-subtle {
     animation: bounceSubtle 3s infinite ease-in-out;
-  }
-  
-  .backdrop-blur-md {
-    backdrop-filter: blur(12px);
-  }
-  
-  .backdrop-blur-xl {
-    backdrop-filter: blur(24px);
   }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(15px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes bounceSubtle {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  50% { transform: translateY(-2px); }
 }
 
-/* Custom Scrollbar for Luxury Look */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 10px;
+  background: #cbd5e1;
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
-}
-
-/* Glassmorphism Classes */
-.glass-panel {
-  @apply bg-slate-900/50 border border-white/10 backdrop-blur-xl rounded-3xl;
-}
-
-.glass-header {
-  @apply bg-slate-900/80 border-b border-white/10 backdrop-blur-md sticky top-0 z-50;
-}
-
-/* Tooltip Styling Override */
-.recharts-default-tooltip {
-  @apply !bg-slate-900/90 !border-slate-800 !rounded-xl !shadow-2xl !backdrop-blur-md !p-3;
-}
-
-.recharts-tooltip-item {
-  @apply !py-0.5 !text-xs font-mono;
+  background: #94a3b8;
 }
