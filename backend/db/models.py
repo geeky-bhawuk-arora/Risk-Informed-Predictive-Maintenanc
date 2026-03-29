@@ -100,5 +100,15 @@ class RiskSnapshot(Base):
 
     component = relationship("Component", back_populates="risk_snapshots")
 
+
+class RiskConfig(Base):
+    __tablename__ = "risk_config"
+
+    config_id = Column(Integer, primary_key=True, index=True)
+    safety_weight = Column(Float, default=0.5)
+    operational_weight = Column(Float, default=0.3)
+    cost_weight = Column(Float, default=0.2)
+    updated_at = Column(DateTime)
+
 # Combined index for risk trend queries
 Index("ix_risk_component_date", RiskSnapshot.component_id, RiskSnapshot.snapshot_date)

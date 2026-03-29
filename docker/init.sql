@@ -78,6 +78,14 @@ CREATE TABLE risk_snapshot (
     failure_label INTEGER -- 0 or 1
 );
 
+CREATE TABLE risk_config (
+    config_id SERIAL PRIMARY KEY,
+    safety_weight FLOAT DEFAULT 0.5,
+    operational_weight FLOAT DEFAULT 0.3,
+    cost_weight FLOAT DEFAULT 0.2,
+    updated_at TIMESTAMP
+);
+
 -- Strategic Indices for Performance at Scale (2M+ readings)
 CREATE INDEX idx_sensor_component_time ON sensor_data(component_id, timestamp);
 CREATE INDEX idx_risk_component_date ON risk_snapshot(component_id, snapshot_date);

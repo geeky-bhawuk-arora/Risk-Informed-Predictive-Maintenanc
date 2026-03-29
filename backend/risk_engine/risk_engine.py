@@ -2,11 +2,66 @@ import os
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
 import pickle
 from datetime import datetime
 
+from backend.db import models
+
 DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localhost:5432/risk_db")
 engine = create_engine(DB_URL)
+
+DEFAULT_WEIGHTS = {"safety": 0.5, "operational": 0.3, "cost": 0.2}
+
+
+def normalize_weights(weights=None):
+    merged = {**DEFAULT_WEIGHTS, **(weights or {})}
+    total = sum(merged.values())
+    if total <= 0:
+        return DEFAULT_WEIGHTS.copy()
+    return {key: value / total for key, value in merged.items()}
+
+
+def get_current_weights(db: Session):
+    config = db.query(models.RiskConfig).order_by(models.RiskConfig.config_id.desc()).first()
+    if not config:
+        config = models.RiskConfig(
+            safety_weight=DEFAULT_WEIGHTS["safety"],
+            operational_weight=DEFAULT_WEIGHTS["operational"],
+            cost_weight=DEFAULT_WEIGHTS["cost"],
+            updated_at=datetime.utcnow(),
+        )
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+
+    return {
+        "safety": float(config.safety_weight),
+        "operational": float(config.operational_weight),
+        "cost": float(config.cost_weight),
+        "updated_at": config.updated_at,
+    }
+
+
+def save_weights(db: Session, weights):
+    normalized = normalize_weights(weights)
+    config = db.query(models.RiskConfig).order_by(models.RiskConfig.config_id.desc()).first()
+    if not config:
+        config = models.RiskConfig()
+        db.add(config)
+
+    config.safety_weight = normalized["safety"]
+    config.operational_weight = normalized["operational"]
+    config.cost_weight = normalized["cost"]
+    config.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(config)
+    return {
+        "safety": config.safety_weight,
+        "operational": config.operational_weight,
+        "cost": config.cost_weight,
+        "updated_at": config.updated_at,
+    }
 
 def calculate_risk(weights=None):
     """
@@ -16,8 +71,7 @@ def calculate_risk(weights=None):
     print(f"--- Running Vectorized Risk Engine (Weights: {weights}) ---")
     start_time = datetime.now()
     
-    if weights is None:
-        weights = {"safety": 0.5, "operational": 0.3, "cost": 0.2}
+    weights = normalize_weights(weights)
         
     # 1. Load Data
     # We use component_features as base because it already has all 16+ features pre-computed
@@ -35,7 +89,7 @@ def calculate_risk(weights=None):
         df_features['failure_probability'] = probs.clip(0, 1)
     else:
         # ML Model Inference
-        X = df_features # Feature engineering ensures columns match ColumnTransformer
+        X = df_features
         probs = model.predict_proba(X)[:, 1]
         df_features['failure_probability'] = probs
 

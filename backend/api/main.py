@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -7,10 +7,11 @@ import pandas as pd
 import io
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Optional
 
 from backend.db.database import SessionLocal, engine
 from backend.db import models
+from backend.api.schemas import ImpactWeightsUpdate
 from backend.ml import pipeline
 from backend.risk_engine import risk_engine
 
@@ -26,6 +27,11 @@ app.add_middleware(
 # --- BACKGROUND JOBS TRACKER ---
 jobs = {}
 
+
+@app.on_event("startup")
+def ensure_schema():
+    models.Base.metadata.create_all(bind=engine)
+
 def get_db():
     db = SessionLocal()
     try:
@@ -36,41 +42,52 @@ def get_db():
 def run_heavy_pipeline(job_id):
     jobs[job_id] = "running"
     try:
-        pipeline.run_pipeline() # Data generation + ML training
+        pipeline.run_pipeline()
         jobs[job_id] = "complete"
     except Exception as e:
         print(f"Job {job_id} failed: {e}")
         jobs[job_id] = "failed"
 
-# --- API ENDPOINTS ---
+
+def get_latest_snapshot_date(db: Session):
+    latest_date = db.query(func.max(models.RiskSnapshot.snapshot_date)).scalar()
+    if not latest_date:
+        raise HTTPException(status_code=404, detail="No risk snapshots available yet")
+    return latest_date
+
+
+def get_latest_snapshots_query(db: Session):
+    latest_date = get_latest_snapshot_date(db)
+    query = db.query(models.RiskSnapshot).filter(models.RiskSnapshot.snapshot_date == latest_date)
+    return latest_date, query
+
+
+def get_recommended_action(level: str) -> str:
+    if level == "HIGH":
+        return "Immediate inspection within 24 hours"
+    if level == "MEDIUM":
+        return "Schedule maintenance within 7 days"
+    return "Routine monitoring and planned maintenance"
+
 
 @app.get("/api/v1/fleet/overview")
 def get_fleet_overview(db: Session = Depends(get_db)):
-    # 1. Total Aircraft
     total_ac = db.query(models.Aircraft).count()
-    
-    # 2. Get LATEST Snapshot only
-    latest_date = db.query(func.max(models.RiskSnapshot.snapshot_date)).scalar()
-    if not latest_date: return {"error": "No data yet"}
-    
-    snaps = db.query(models.RiskSnapshot).filter(models.RiskSnapshot.snapshot_date == latest_date).all()
-    
+
+    latest_date, latest_query = get_latest_snapshots_query(db)
+    snaps = latest_query.all()
+
     high = len([s for s in snaps if s.risk_level == "HIGH"])
     medium = len([s for s in snaps if s.risk_level == "MEDIUM"])
     low = len([s for s in snaps if s.risk_level == "LOW"])
-    
-    # Fleet Health Score
-    # Simplified: 100 * (1 - mean_risk)
+
     avg_risk = sum([s.risk_score for s in snaps]) / len(snaps) if snaps else 0
-    health_score = round(100 * (1 - avg_risk), 1)
-    
-    # Tier Changes (MEDIUM -> HIGH)
-    # Simple check for now based on previous date
+    health_score = round(max(0.0, min(100.0, 100 * (1 - avg_risk))), 1)
+
     prev_date = db.query(func.max(models.RiskSnapshot.snapshot_date))\
                   .filter(models.RiskSnapshot.snapshot_date < latest_date).scalar()
     change_count = 0
     if prev_date:
-        # Vectorized check via SQL would be faster, but let's do simple query
         count_q = text("""
             SELECT COUNT(*) 
             FROM risk_snapshot s_curr
@@ -92,7 +109,6 @@ def get_fleet_overview(db: Session = Depends(get_db)):
 
 @app.get("/api/v1/fleet/health-score")
 def get_health_trend(db: Session = Depends(get_db)):
-    # Aggregated past 30 days
     trend_q = text("""
         SELECT snapshot_date::date as d, 100 * (1 - AVG(risk_score)) as score
         FROM risk_snapshot
@@ -102,21 +118,90 @@ def get_health_trend(db: Session = Depends(get_db)):
     rows = db.execute(trend_q).fetchall()
     return [{"date": str(r[0]), "score": round(r[1], 1)} for r in rows]
 
+
+@app.get("/api/v1/fleet/breakdown")
+def get_fleet_breakdown(db: Session = Depends(get_db)):
+    latest_date = get_latest_snapshot_date(db)
+
+    by_type = db.execute(text("""
+        SELECT a.type AS name, ROUND(AVG(rs.risk_score)::numeric, 3) AS avg_risk
+        FROM risk_snapshot rs
+        JOIN component c ON c.component_id = rs.component_id
+        JOIN aircraft a ON a.aircraft_id = c.aircraft_id
+        WHERE rs.snapshot_date = :latest_date
+        GROUP BY a.type
+        ORDER BY avg_risk DESC
+    """), {"latest_date": latest_date}).mappings().all()
+
+    by_zone = db.execute(text("""
+        SELECT a.climate_zone AS name, ROUND(AVG(rs.risk_score)::numeric, 3) AS avg_risk
+        FROM risk_snapshot rs
+        JOIN component c ON c.component_id = rs.component_id
+        JOIN aircraft a ON a.aircraft_id = c.aircraft_id
+        WHERE rs.snapshot_date = :latest_date
+        GROUP BY a.climate_zone
+        ORDER BY avg_risk DESC
+    """), {"latest_date": latest_date}).mappings().all()
+
+    by_system = db.execute(text("""
+        SELECT c.system_category AS name, ROUND(AVG(rs.risk_score)::numeric, 3) AS avg_risk
+        FROM risk_snapshot rs
+        JOIN component c ON c.component_id = rs.component_id
+        WHERE rs.snapshot_date = :latest_date
+        GROUP BY c.system_category
+        ORDER BY avg_risk DESC
+    """), {"latest_date": latest_date}).mappings().all()
+
+    return {
+        "by_type": [dict(row) for row in by_type],
+        "by_zone": [dict(row) for row in by_zone],
+        "by_system": [dict(row) for row in by_system],
+    }
+
+
+@app.get("/api/v1/fleet/tier-changes")
+def get_tier_changes(db: Session = Depends(get_db)):
+    latest_date = get_latest_snapshot_date(db)
+    prev_date = db.query(func.max(models.RiskSnapshot.snapshot_date))\
+        .filter(models.RiskSnapshot.snapshot_date < latest_date).scalar()
+    if not prev_date:
+        return []
+
+    rows = db.execute(text("""
+        SELECT c.component_id, c.name, c.system_category, curr.risk_level AS current_level, prev.risk_level AS previous_level
+        FROM risk_snapshot curr
+        JOIN risk_snapshot prev ON curr.component_id = prev.component_id
+        JOIN component c ON c.component_id = curr.component_id
+        WHERE curr.snapshot_date = :current_date
+          AND prev.snapshot_date = :previous_date
+          AND curr.risk_level = 'HIGH'
+          AND prev.risk_level <> 'HIGH'
+        ORDER BY curr.risk_score DESC
+    """), {"current_date": latest_date, "previous_date": prev_date}).mappings().all()
+
+    return [dict(row) for row in rows]
+
 @app.get("/api/v1/components/risk-rankings")
 def get_risk_rankings(
     page: int = 1, 
     limit: int = 50, 
     level: Optional[str] = None,
     cat: Optional[str] = None,
+    search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    latest_date = db.query(func.max(models.RiskSnapshot.snapshot_date)).scalar()
+    latest_date = get_latest_snapshot_date(db)
     query = db.query(models.RiskSnapshot, models.Component)\
               .join(models.Component)\
               .filter(models.RiskSnapshot.snapshot_date == latest_date)
     
     if level: query = query.filter(models.RiskSnapshot.risk_level == level)
     if cat: query = query.filter(models.Component.system_category == cat)
+    if search:
+        query = query.filter(
+            models.Component.name.ilike(f"%{search}%")
+            | models.Component.system_category.ilike(f"%{search}%")
+        )
     
     total = query.count()
     results = query.order_by(desc(models.RiskSnapshot.risk_score))\
@@ -132,7 +217,8 @@ def get_risk_rankings(
             "aircraft_id": r.Component.aircraft_id,
             "risk_score": round(r.RiskSnapshot.risk_score, 3),
             "failure_prob": round(r.RiskSnapshot.failure_probability, 3),
-            "level": r.RiskSnapshot.risk_level
+            "level": r.RiskSnapshot.risk_level,
+            "recommended_action": get_recommended_action(r.RiskSnapshot.risk_level),
         } for r in results]
     }
 
@@ -140,10 +226,15 @@ def get_risk_rankings(
 def get_component_risk(id: int, db: Session = Depends(get_db)):
     latest = db.query(models.RiskSnapshot).filter(models.RiskSnapshot.component_id == id)\
                .order_by(desc(models.RiskSnapshot.snapshot_date)).first()
-    comp = db.query(models.Component).get(id)
+    comp = db.query(models.Component).filter(models.Component.component_id == id).first()
     if not latest or not comp: raise HTTPException(status_code=404)
-    
+
     return {
+        "component_id": comp.component_id,
+        "component_name": comp.name,
+        "system_category": comp.system_category,
+        "aircraft_id": comp.aircraft_id,
+        "snapshot_date": latest.snapshot_date,
         "risk_score": latest.risk_score,
         "failure_prob": latest.failure_probability,
         "impact": {
@@ -152,7 +243,8 @@ def get_component_risk(id: int, db: Session = Depends(get_db)):
             "cost": comp.cost_score,
             "weighted_impact": latest.impact_score
         },
-        "recommended_action": "Immediate Inspection" if latest.risk_level == "HIGH" else "Scheduled Check"
+        "risk_level": latest.risk_level,
+        "recommended_action": get_recommended_action(latest.risk_level)
     }
 
 @app.get("/api/v1/components/{id}/sensor-history")
@@ -167,12 +259,59 @@ def get_sensor_history(id: int, db: Session = Depends(get_db)):
         "is_anomaly": r.is_anomaly
     } for r in history]
 
+
+@app.get("/api/v1/components/{id}/risk-trend")
+def get_component_risk_trend(id: int, db: Session = Depends(get_db)):
+    rows = db.query(models.RiskSnapshot)\
+        .filter(models.RiskSnapshot.component_id == id)\
+        .order_by(models.RiskSnapshot.snapshot_date.desc())\
+        .limit(30)\
+        .all()
+    return [
+        {
+            "snapshot_date": row.snapshot_date,
+            "risk_score": row.risk_score,
+            "failure_probability": row.failure_probability,
+            "risk_level": row.risk_level,
+        }
+        for row in reversed(rows)
+    ]
+
+
+@app.get("/api/v1/components/{id}/maintenance-history")
+def get_component_maintenance_history(id: int, db: Session = Depends(get_db)):
+    rows = db.query(models.MaintenanceLog)\
+        .filter(models.MaintenanceLog.component_id == id)\
+        .order_by(models.MaintenanceLog.maintenance_date.desc())\
+        .limit(20)\
+        .all()
+    return [
+        {
+            "maintenance_date": row.maintenance_date,
+            "maintenance_type": row.maintenance_type,
+            "subtype": row.subtype,
+            "description": row.description,
+            "outcome": row.outcome,
+            "duration_hours": row.duration_hours,
+            "parts_cost": row.parts_cost,
+            "was_predictable": row.was_predictable,
+        }
+        for row in rows
+    ]
+
 @app.post("/api/v1/settings/impact-weights")
-def update_weights(w: dict, db: Session = Depends(get_db)):
-    # w: {"safety": 0.5, "operational": 0.3, "cost": 0.2}
-    if sum(w.values()) != 1.0: raise HTTPException(status_code=400, detail="Weights must sum to 1.0")
-    risk_engine.calculate_risk(weights=w)
-    return get_fleet_overview(db)
+def update_weights(w: ImpactWeightsUpdate, db: Session = Depends(get_db)):
+    saved = risk_engine.save_weights(db, w.model_dump())
+    risk_engine.calculate_risk(weights=w.model_dump())
+    return {
+        "weights": saved,
+        "overview": get_fleet_overview(db),
+    }
+
+
+@app.get("/api/v1/settings/impact-weights")
+def get_weights(db: Session = Depends(get_db)):
+    return risk_engine.get_current_weights(db)
 
 @app.post("/api/v1/data/regenerate")
 def regenerate_data(background_tasks: BackgroundTasks):
@@ -232,10 +371,11 @@ def get_aircraft(page: int = 1, limit: int = 50, db: Session = Depends(get_db)):
 
 @app.get("/api/v1/aircraft/{id}/health")
 def get_aircraft_health(id: int, db: Session = Depends(get_db)):
+    latest_snapshot_date = get_latest_snapshot_date(db)
     snaps = db.query(models.RiskSnapshot, models.Component)\
               .join(models.Component)\
               .filter(models.Component.aircraft_id == id)\
-              .filter(models.RiskSnapshot.snapshot_date == (db.query(func.max(models.RiskSnapshot.snapshot_date)).scalar()))\
+              .filter(models.RiskSnapshot.snapshot_date == latest_snapshot_date)\
               .all()
     
     if not snaps: raise HTTPException(status_code=404)
@@ -249,6 +389,29 @@ def get_aircraft_health(id: int, db: Session = Depends(get_db)):
         "health_score": round(health, 1),
         "tier_counts": tier_counts
     }
+
+
+@app.get("/api/v1/aircraft/{id}/components")
+def get_aircraft_components(id: int, db: Session = Depends(get_db)):
+    latest_snapshot_date = get_latest_snapshot_date(db)
+    rows = db.query(models.Component, models.RiskSnapshot)\
+        .join(models.RiskSnapshot, models.RiskSnapshot.component_id == models.Component.component_id)\
+        .filter(models.Component.aircraft_id == id)\
+        .filter(models.RiskSnapshot.snapshot_date == latest_snapshot_date)\
+        .order_by(desc(models.RiskSnapshot.risk_score))\
+        .all()
+
+    return [
+        {
+            "component_id": component.component_id,
+            "name": component.name,
+            "system_category": component.system_category,
+            "risk_score": snapshot.risk_score,
+            "risk_level": snapshot.risk_level,
+            "failure_probability": snapshot.failure_probability,
+        }
+        for component, snapshot in rows
+    ]
 
 @app.get("/api/v1/components/risk-rankings/export")
 def export_rankings(db: Session = Depends(get_db)):

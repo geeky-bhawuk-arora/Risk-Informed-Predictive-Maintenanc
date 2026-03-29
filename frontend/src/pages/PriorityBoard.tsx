@@ -19,7 +19,7 @@ const PriorityBoard = () => {
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            const res = await componentApi.getRiskRankings(page, 20, level, category);
+            const res = await componentApi.getRiskRankings(page, 20, level, category, search || undefined);
             setComponents(res.components || []);
             setTotal(res.total || 0);
         } catch (err) {
@@ -144,8 +144,7 @@ const PriorityBoard = () => {
                                         <div className="flex items-center gap-2">
                                             <div className={`w-1.5 h-1.5 rounded-full ${c.level === 'HIGH' ? 'bg-rose-500' : 'bg-slate-600'}`}></div>
                                             <span className="text-sm text-slate-400">
-                                                {c.level === 'HIGH' ? 'Immediate removal/insp < 24h' : 
-                                                 c.level === 'MEDIUM' ? 'Schedule within 7 days' : 'Routine monitoring only'}
+                                                {c.recommended_action}
                                             </span>
                                         </div>
                                     </td>

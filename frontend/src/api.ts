@@ -15,8 +15,8 @@ export const fleetApi = {
 };
 
 export const componentApi = {
-    getRiskRankings: (page = 1, limit = 50, level?: string, cat?: string) => 
-        apiClient.get('/components/risk-rankings', { params: { page, limit, level, cat } }).then(r => r.data),
+    getRiskRankings: (page = 1, limit = 50, level?: string, cat?: string, search?: string) => 
+        apiClient.get('/components/risk-rankings', { params: { page, limit, level, cat, search } }).then(r => r.data),
     getRiskDetail: (id: string | number) => apiClient.get(`/components/${id}/risk`).then(r => r.data),
     getSensorHistory: (id: string | number) => apiClient.get(`/components/${id}/sensor-history`).then(r => r.data),
     getRiskTrend: (id: string | number) => apiClient.get(`/components/${id}/risk-trend`).then(r => r.data),
@@ -31,6 +31,7 @@ export const aircraftApi = {
 };
 
 export const settingsApi = {
+    getWeights: () => apiClient.get('/settings/impact-weights').then(r => r.data),
     updateWeights: (weights: { safety: number; operational: number; cost: number }) => 
         apiClient.post('/settings/impact-weights', weights).then(r => r.data),
     regenerateData: () => apiClient.post('/data/regenerate').then(r => r.data),

@@ -19,7 +19,14 @@ const SettingsPanel = () => {
     const [overview, setOverview] = useState<any>(null);
 
     useEffect(() => {
-        fleetApi.getOverview().then(setOverview);
+        Promise.all([fleetApi.getOverview(), settingsApi.getWeights()]).then(([overviewResponse, weightResponse]) => {
+            setOverview(overviewResponse);
+            setWeights({
+                safety: weightResponse.safety,
+                operational: weightResponse.operational,
+                cost: weightResponse.cost,
+            });
+        });
     }, []);
 
     const handleWeightChange = (key: 'safety' | 'operational' | 'cost', value: number) => {
@@ -59,9 +66,8 @@ const SettingsPanel = () => {
     const handleSave = async () => {
         setIsSaving(true);
         try {
-            await settingsApi.updateWeights(weights);
-            const res = await fleetApi.getOverview();
-            setOverview(res);
+            const response = await settingsApi.updateWeights(weights);
+            setOverview(response.overview);
             setPreviewChanges(null);
             alert("Risk engine recalibrated with new impact weights.");
         } catch (err) {
