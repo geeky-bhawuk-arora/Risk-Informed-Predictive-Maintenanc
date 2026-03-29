@@ -20,6 +20,8 @@ export const componentApi = {
     getRiskDetail: (id: string | number) => apiClient.get(`/components/${id}/risk`).then(r => r.data),
     getSensorHistory: (id: string | number) => apiClient.get(`/components/${id}/sensor-history`).then(r => r.data),
     getRiskTrend: (id: string | number) => apiClient.get(`/components/${id}/risk-trend`).then(r => r.data),
+    updateRisk: (id: string | number, payload: { comments?: string; is_checked?: boolean }) => 
+        apiClient.patch(`/components/${id}/risk`, payload).then(r => r.data),
     getMaintenanceHistory: (id: string | number) => apiClient.get(`/components/${id}/maintenance-history`).then(r => r.data),
     exportRankings: () => `${API_BASE_URL}/components/risk-rankings/export`,
 };

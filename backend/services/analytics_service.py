@@ -186,7 +186,25 @@ def get_component_risk(db: Session, component_id: int):
         },
         "risk_level": latest.risk_level,
         "recommended_action": get_recommended_action(latest.risk_level),
+        "comments": latest.comments,
+        "is_checked": latest.is_checked,
     }
+
+
+def update_component_risk(db: Session, component_id: int, comments: Optional[str], is_checked: Optional[bool]):
+    latest = db.query(models.RiskSnapshot).filter(models.RiskSnapshot.component_id == component_id)\
+        .order_by(desc(models.RiskSnapshot.snapshot_date)).first()
+    if not latest:
+        raise HTTPException(status_code=404)
+    
+    if comments is not None:
+        latest.comments = comments
+    if is_checked is not None:
+        latest.is_checked = is_checked
+    
+    db.commit()
+    db.refresh(latest)
+    return get_component_risk(db, component_id)
 
 
 def get_component_sensor_history(db: Session, component_id: int):

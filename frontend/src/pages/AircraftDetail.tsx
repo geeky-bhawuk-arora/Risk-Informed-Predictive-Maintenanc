@@ -76,8 +76,8 @@ const AircraftDetail = () => {
   }
 
   const filteredComponents = components.filter(c => 
-    c.component_name.toLowerCase().includes(search.toLowerCase()) ||
-    c.part_number.toLowerCase().includes(search.toLowerCase())
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    (c.part_number && c.part_number.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -198,16 +198,16 @@ const AircraftDetail = () => {
               {filteredComponents.map((comp) => (
                 <tr key={comp.component_id} className="group hover:bg-slate-50 transition">
                   <td className="px-6 py-4">
-                    <div className="font-semibold text-slate-900">{comp.component_name}</div>
+                    <div className="font-semibold text-slate-900">{comp.name}</div>
                     <div className="text-xs text-slate-500 capitalize">{comp.system_category}</div>
                   </td>
                   <td className="px-6 py-4 font-mono text-sm text-slate-600">
                     {comp.part_number}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold uppercase ${getTierStyles(comp.risk_tier)}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${getTierDot(comp.risk_tier)}`}></span>
-                      {comp.risk_tier}
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold uppercase ${getTierStyles(comp.risk_level)}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${getTierDot(comp.risk_level)}`}></span>
+                      {comp.risk_level}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -28,3 +28,7 @@ class JobResponse(BaseModel):
     job_id: str
     status: Literal["pending", "running", "complete", "failed"]
 
+
+class RiskUpdate(BaseModel):
+    comments: Optional[str] = None
+    is_checked: Optional[bool] = None

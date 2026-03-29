@@ -4,6 +4,8 @@ import sys
 import time
 
 from sqlalchemy import create_engine, text
+from backend.db import models
+from backend.db.database import engine as db_engine
 
 DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@db:5432/risk_db")
 DEFAULT_SCALE = os.getenv("RBAMPS_BOOTSTRAP_SCALE", "small")
@@ -28,9 +30,20 @@ def wait_for_database(max_attempts: int = 30, delay_seconds: int = 2):
 
 
 def table_has_rows(engine, table_name: str) -> bool:
-    with engine.connect() as connection:
-        result = connection.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
-        return int(result.scalar() or 0) > 0
+    try:
+        with engine.connect() as connection:
+            # Check if table exists first using information schema
+            exists_q = text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = :table)")
+            exists = connection.execute(exists_q, {"table": table_name}).scalar()
+            if not exists:
+                return False
+            
+            # If it exists, check row count
+            result = connection.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+            return int(result.scalar() or 0) > 0
+    except Exception as e:
+        print(f"Check failed for {table_name}: {e}")
+        return False
 
 
 def bootstrap_data_if_needed(engine):
@@ -45,6 +58,7 @@ def bootstrap_data_if_needed(engine):
 
 def main():
     engine = wait_for_database()
+    models.Base.metadata.create_all(bind=db_engine)
     bootstrap_data_if_needed(engine)
 
 

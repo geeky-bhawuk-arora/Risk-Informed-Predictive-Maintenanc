@@ -11,7 +11,7 @@ from typing import Optional
 from backend.db.database import SessionLocal, engine
 from backend.db import models
 from backend.api.assistant_schemas import AssistantQuestionRequest
-from backend.api.schemas import ImpactWeightsUpdate
+from backend.api.schemas import ImpactWeightsUpdate, RiskUpdate
 from backend.ml import pipeline
 from backend.risk_engine import risk_engine
 from backend.services import analytics_service, model_service, assistant_service
@@ -82,6 +82,10 @@ def get_risk_rankings(
 @app.get("/api/v1/components/{id}/risk")
 def get_component_risk(id: int, db: Session = Depends(get_db)):
     return analytics_service.get_component_risk(db, id)
+
+@app.patch("/api/v1/components/{id}/risk")
+def update_component_risk(id: int, payload: RiskUpdate, db: Session = Depends(get_db)):
+    return analytics_service.update_component_risk(db, id, payload.comments, payload.is_checked)
 
 @app.get("/api/v1/components/{id}/sensor-history")
 def get_sensor_history(id: int, db: Session = Depends(get_db)):

@@ -186,6 +186,42 @@ const ComponentDetail = () => {
         <div className="space-y-8">
           <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
             <h3 className="text-lg font-black text-slate-900 mb-6 flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-sky-600" />
+              Maintenance Review
+            </h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <span className="text-sm font-bold text-slate-700">Check Completed</span>
+                <button 
+                  onClick={() => {
+                    const next = !risk.is_checked;
+                    componentApi.updateRisk(id!, { is_checked: next }).then(res => setRisk(res));
+                  }}
+                  className={`h-10 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                    risk.is_checked 
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100' 
+                    : 'bg-white text-slate-400 border border-slate-200 hover:border-sky-300 hover:text-sky-600'
+                  }`}
+                >
+                  {risk.is_checked ? 'Completed' : 'Mark Complete'}
+                </button>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Team Comments</label>
+                <textarea 
+                  value={risk.comments || ''}
+                  onChange={(e) => setRisk({ ...risk, comments: e.target.value })}
+                  onBlur={() => componentApi.updateRisk(id!, { comments: risk.comments })}
+                  placeholder="Annotate risk findings or inspection results..."
+                  className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-xs font-medium outline-none focus:border-sky-300 focus:bg-white transition-all h-24 resize-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+            <h3 className="text-lg font-black text-slate-900 mb-6 flex items-center gap-2">
               <Gauge className="h-5 w-5 text-amber-500" />
               Impact Vector
             </h3>

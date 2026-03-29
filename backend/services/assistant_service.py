@@ -94,11 +94,14 @@ def answer_question(db: Session, question: str):
     if component_match:
         component_id = int(component_match.group(1))
         detail = analytics_service.get_component_risk(db, component_id)
+        status_msg = "Maintenance check is COMPLETED." if detail.get('is_checked') else "Maintenance check is PENDING."
+        comments_msg = f" Team notes: {detail['comments']}" if detail.get('comments') else ""
+        
         return {
             "answer": (
-                f"Component {component_id}, {detail['component_name']}, is {detail['risk_level']} risk with score "
-                f"{detail['risk_score']:.3f}, failure probability {detail['failure_prob']:.3f}, and weighted impact "
-                f"{detail['impact']['weighted_impact']:.3f}. Recommended action: {detail['recommended_action']}."
+                f"Component {component_id} ({detail['component_name']}) is currently ranked as {detail['risk_level']} risk "
+                f"(score: {detail['risk_score']:.3f}). {status_msg}{comments_msg} "
+                f"Recommended action: {detail['recommended_action']}."
             ),
             "intent": "component_detail",
             "data": detail,

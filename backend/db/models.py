@@ -97,6 +97,8 @@ class RiskSnapshot(Base):
     risk_level = Column(String(20), index=True) # HIGH, MEDIUM, LOW
     is_training_instance = Column(Boolean, default=False)
     failure_label = Column(Integer) # 0 or 1
+    comments = Column(Text, nullable=True)
+    is_checked = Column(Boolean, default=False)
 
     component = relationship("Component", back_populates="risk_snapshots")
 
