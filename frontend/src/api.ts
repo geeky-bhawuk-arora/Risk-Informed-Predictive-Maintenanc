@@ -41,3 +41,7 @@ export const settingsApi = {
 export const modelApi = {
     getPerformance: () => apiClient.get('/model/performance').then(r => r.data),
 };
+
+export const assistantApi = {
+    ask: (question: string) => apiClient.post('/assistant/ask', { question }).then(r => r.data),
+};

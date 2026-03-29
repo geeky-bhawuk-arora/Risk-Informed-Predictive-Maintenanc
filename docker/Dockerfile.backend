@@ -25,10 +25,8 @@ ENV PYTHONPATH=/app
 ENV DATABASE_URL=postgresql://risk_user:risk_password@db:5432/risk_db
 ENV MLFLOW_TRACKING_URI=http://mlflow:5000
 
-# Startup script: Wait for DB -> Generate Data -> Start API
-# Using small scale for initial startup.
-CMD ["sh", "-c", "echo 'Synchronizing Fleet Infrastructure...' && sleep 15 && \
-    python -u data/generator/generator.py --scale small && \
-    python -u backend/ml/pipeline.py && \
+# Startup script: wait for DB, bootstrap only when the dataset is absent, then start API.
+CMD ["sh", "-c", "echo 'Synchronizing Fleet Infrastructure...' && \
+    python -u backend/scripts/bootstrap.py && \
     echo 'API Server warming up...' && \
     uvicorn backend.api.main:app --host 0.0.0.0 --port 8000"]
