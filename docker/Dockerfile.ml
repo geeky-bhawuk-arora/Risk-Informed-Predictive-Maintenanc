@@ -20,6 +20,6 @@ ENV PYTHONPATH=/app
 
 # Startup logic: Wait for DB -> Generate Data -> Run ML Pipeline
 CMD ["sh", "-c", "echo 'Waiting for DB to be operational...' && sleep 15 && \
-    python -u data/generator/generator.py && \
+    python -u data/generator/generator.py --scale small && \
     python -u backend/ml/pipeline.py && \
     echo 'Pipeline complete. Artifacts stored.' && sleep infinity"]

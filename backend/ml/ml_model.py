@@ -4,137 +4,138 @@ import numpy as np
 from sqlalchemy import create_engine, text
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import GroupKFold, cross_validate
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     accuracy_score, roc_auc_score, precision_recall_curve, 
-    f1_score, brier_score_loss, auc
+    f1_score, brier_score_loss, auc, confusion_matrix
 )
+from sklearn.calibration import calibration_curve
 import mlflow
 import mlflow.sklearn
 import pickle
-from datetime import datetime, timedelta
+from datetime import datetime
 
 DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localhost:5432/risk_db")
 engine = create_engine(DB_URL)
 
 def train_and_predict():
-    print("Starting ML Model Training and Prediction...")
+    print("--- Starting ML model training (GroupKFold + Alignment v3) ---")
     
-    # 1. Load data
-    df_features = pd.read_sql("SELECT * FROM component_features", engine)
-    df_maint = pd.read_sql("SELECT component_id, maintenance_date, type FROM maintenance_log", engine)
+    # 1. Load Feature Data
+    df = pd.read_sql("SELECT * FROM component_features", engine)
     
-    # 2. Derive labels (Ground Truth)
-    # Binary label: 1 if an unscheduled maintenance event occurs within 30 days of the observation
-    # Since we are using the 'current' snapshot, we check if there are future unscheduled events
-    # relative to the feature_timestamp. 
-    labels = []
-    for _, row in df_features.iterrows():
-        comp_id = row['component_id']
-        obs_time = pd.to_datetime(row['feature_timestamp'])
-        lookahead_limit = obs_time + timedelta(days=30)
-        
-        future_failures = df_maint[
-            (df_maint['component_id'] == comp_id) & 
-            (df_maint['type'].str.lower() == 'unscheduled') & 
-            (pd.to_datetime(df_maint['maintenance_date']) > obs_time) & 
-            (pd.to_datetime(df_maint['maintenance_date']) <= lookahead_limit)
-        ]
-        labels.append(1 if not future_failures.empty else 0)
-    
-    df_features['label'] = labels
-    
-    # Feature columns
-    feature_cols = [
+    # Column mapping
+    num_features = [
         'days_since_last_maintenance', 'historical_failure_count', 'component_age_hours',
         'sensor_mean_7d', 'sensor_std_7d', 'sensor_trend_slope',
-        'aircraft_age_years', 'flight_cycles_30d', 'utilization_intensity'
+        'aircraft_age_years', 'flight_cycles_30d', 'utilization_intensity',
+        'anomaly_count_30d', 'missing_data_rate_7d', 'mtbf_ratio'
     ]
+    cat_features = ['climate_zone', 'system_category']
     
-    X = df_features[feature_cols].fillna(0)
-    y = df_features['label']
+    X = df[num_features + cat_features]
+    y = df['label']
+    groups = df['aircraft_id_group']
     
-    # Check class distribution
-    if y.sum() == 0:
-        print("Warning: No failures found in lookahead period. Using synthetic labels for demonstration.")
-        # Fallback to avoid training failure if generator hasn't produced future failures yet
-        y = ((X['sensor_mean_7d'] > X['sensor_mean_7d'].mean()) & (X['sensor_trend_slope'] > 0)).astype(int)
-
-    # 3. Train/Test Split (Stratified)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y if y.sum() > 1 else None
-    )
+    if y.nunique() < 2:
+        print("WARNING: Only one class found in labels (no failures). Skipping actual training to avoid solver crash.")
+        print("System will use fallback risk heuristics for this run.")
+        return
     
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-    X_all_scaled = scaler.transform(X)
+    # Stratified Group Split (Manual for validation/test set holding out aircraft)
+    # We hold out 30% of aircraft for val/test
+    all_aircraft = groups.unique()
+    np.random.shuffle(all_aircraft)
+    train_split = int(len(all_aircraft) * 0.7)
+    val_split = int(len(all_aircraft) * 0.85)
     
-    mlflow.set_tracking_uri("http://mlflow:5000") # Docker service name
-    mlflow.set_experiment("RBAMPS-Engine")
+    train_ac = all_aircraft[:train_split]
+    val_ac = all_aircraft[train_split:val_split]
+    test_ac = all_aircraft[val_split:]
     
-    with mlflow.start_run():
-        # Gradient Boosting (Primary)
-        model = GradientBoostingClassifier(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=42)
-        model.fit(X_train_scaled, y_train)
+    X_train, y_train = X[groups.isin(train_ac)], y[groups.isin(train_ac)]
+    X_val, y_val = X[groups.isin(val_ac)], y[groups.isin(val_ac)]
+    X_test, y_test = X[groups.isin(test_ac)], y[groups.isin(test_ac)]
+    
+    print(f"Training on {len(X_train)} instances ({len(train_ac)} aircraft)")
+    print(f"Testing on {len(X_test)} instances ({len(test_ac)} aircraft)")
+    
+    # 2. Pipeline Definition
+    preprocessor = ColumnTransformer([
+        ('num', Pipeline([
+            ('impute', SimpleImputer(strategy='constant', fill_value=0)),
+            ('scale', StandardScaler())
+        ]), num_features),
+        ('cat', Pipeline([
+            ('impute', SimpleImputer(strategy='constant', fill_value='unknown')),
+            ('encode', OneHotEncoder(handle_unknown='ignore'))
+        ]), cat_features)
+    ])
+    
+    mlflow.set_tracking_uri("http://mlflow:5000")
+    mlflow.set_experiment("RBAMPS-Engine-v3")
+    
+    with mlflow.start_run(run_name="Full_Alignment_GBM"):
+        # MODEL 1: Logistic Regression Baseline
+        lr_pipe = Pipeline([('pre', preprocessor), ('clf', LogisticRegression(class_weight='balanced'))])
+        lr_pipe.fit(X_train, y_train)
+        lr_probs = lr_pipe.predict_proba(X_test)[:, 1]
+        mlflow.log_metric("baseline_auc", roc_auc_score(y_test, lr_probs))
         
-        # Predictions
-        y_probs = model.predict_proba(X_test_scaled)[:, 1]
-        y_preds = (y_probs >= 0.3).astype(int) # Using threshold 0.3 as per spec
+        # MODEL 2: Gradient Boosting Classifier
+        gb_pipe = Pipeline([
+            ('pre', preprocessor), 
+            ('clf', GradientBoostingClassifier(n_estimators=150, learning_rate=0.05, max_depth=4, random_state=42))
+        ])
+        gb_pipe.fit(X_train, y_train)
+        
+        # Evaluation
+        y_probs = gb_pipe.predict_proba(X_val)[:, 1]
+        y_preds = (y_probs >= 0.3).astype(int) # Threshold 0.3 as per specification
         
         # Metrics
-        auc_roc = roc_auc_score(y_test, y_probs)
-        precision, recall, _ = precision_recall_curve(y_test, y_probs)
+        auc_roc = roc_auc_score(y_val, y_probs)
+        precision, recall, _ = precision_recall_curve(y_val, y_probs)
         pr_auc = auc(recall, precision)
-        f1 = f1_score(y_test, y_preds)
-        brier = brier_score_loss(y_test, y_probs)
+        f1_03 = f1_score(y_val, y_preds)
+        brier = brier_score_loss(y_val, y_probs)
+        cm = confusion_matrix(y_val, y_preds)
         
-        # Log Hyperparameters
-        mlflow.log_params(model.get_params())
-        
-        # Log Metrics
-        mlflow.log_metric("auc_roc", auc_roc)
-        mlflow.log_metric("pr_auc", pr_auc)
-        mlflow.log_metric("f1_at_0.3", f1)
-        mlflow.log_metric("brier_score", brier)
+        # Calibration
+        prob_true, prob_pred = calibration_curve(y_val, y_probs, n_bins=10)
         
         # Feature Importance
-        importances = model.feature_importances_
-        for i, val in enumerate(importances):
-            mlflow.log_metric(f"importance_{feature_cols[i]}", val)
-            
-        mlflow.sklearn.log_model(model, "gbm_model")
+        ohe_cats = gb_pipe.named_steps['pre'].transformers_[1][1].get_feature_names_out(cat_features)
+        feature_names = num_features + list(ohe_cats)
+        importances = gb_pipe.named_steps['clf'].feature_importances_
         
-        # Save model and scaler locally
-        os.makedirs("models", exist_ok=True)
-        with open("models/model.pkl", "wb") as f:
-            pickle.dump(model, f)
-        with open("models/scaler.pkl", "wb") as f:
-            pickle.dump(scaler, f)
+        # Logging
+        mlflow.log_params(gb_pipe.named_steps['clf'].get_params())
+        mlflow.log_metric("auc_roc", auc_roc)
+        mlflow.log_metric("pr_auc", pr_auc)
+        mlflow.log_metric("f1_at_03", f1_03)
+        mlflow.log_metric("brier_score", brier)
+        
+        for name, imp in zip(feature_names, importances):
+            mlflow.log_metric(f"importance_{name}", imp)
             
-        print(f"Model trained. AUC-ROC: {auc_roc:.2f}, F1: {f1:.2f}")
+        mlflow.sklearn.log_model(gb_pipe, "gbm_pipeline")
+        
+        # Save locally for risk engine consumption
+        os.makedirs("models", exist_ok=True)
+        with open("models/model_v3.pkl", "wb") as f:
+            pickle.dump(gb_pipe, f)
+            
+        print(f"GB Training Complete. AUC-ROC: {auc_roc:.3f}, PR-AUC: {pr_auc:.3f}")
 
-    # 4. Generate Predictions for all components
-    all_probs = model.predict_proba(X_all_scaled)[:, 1]
-    
-    df_preds = pd.DataFrame({
-        'component_id': df_features['component_id'],
-        'failure_probability': all_probs,
-        'computed_at': pd.Timestamp.now()
-    })
-    
-    # Save to database (re-mapping to risk process)
-    with engine.connect() as con:
-        con.execute(text("TRUNCATE TABLE risk_score RESTART IDENTITY;"))
-        con.commit()
-    
-    # We'll insert into risk_score directly here or let risk_engine handle it
-    # Risk engine expects failure_probability. Let's create a temp table or use the risk_score table.
-    # The spec says Risk engine computes Risk Score = P(failure) * Impact.
-    # So we'll save P(failure) somewhere.
-    df_preds.to_sql('risk_score', engine, if_exists='append', index=False)
-    print(f"Probabilities saved to risk_score table.")
+    # 3. Generate Predictions for all components to populate RiskSnapshot initial view
+    # But actually, risk_engine.py will do the vectorized computation for live scores.
+    # This script just prepares the model.
+    print("Model serialization complete.")
 
 if __name__ == "__main__":
     train_and_predict()

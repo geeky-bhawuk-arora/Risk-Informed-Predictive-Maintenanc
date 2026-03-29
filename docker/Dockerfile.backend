@@ -1,25 +1,34 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for psycopg2 and other ML libs
+# System dependencies for ML libraries
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Use combined requirements for backend (it triggers ML too)
-COPY data/requirements.txt ./data_requirements.txt
-COPY backend/requirements.txt ./backend_requirements.txt
-RUN pip install --no-cache-dir -r data_requirements.txt
-RUN pip install --no-cache-dir -r backend_requirements.txt
+# Copy backend dependencies
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy entire project context to maintain absolute path imports (e.g. from backend.db...)
+# Copy data generation dependencies (scipy, etc.)
+COPY data/requirements.txt ./data_requirements.txt
+RUN pip install --no-cache-dir -r data_requirements.txt
+
+# Copy application code
 COPY . .
 
-# Ensure the backend directory is in the PYTHONPATH
+# Set PYTHONPATH to allow absolute imports
 ENV PYTHONPATH=/app
+ENV DATABASE_URL=postgresql://risk_user:risk_password@db:5432/risk_db
+ENV MLFLOW_TRACKING_URI=http://mlflow:5000
 
-EXPOSE 8000
-
-CMD ["uvicorn", "backend.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Startup script: Wait for DB -> Generate Data -> Start API
+# Using small scale for initial startup.
+CMD ["sh", "-c", "echo 'Synchronizing Fleet Infrastructure...' && sleep 15 && \
+    python -u data/generator/generator.py --scale small && \
+    python -u backend/ml/pipeline.py && \
+    echo 'API Server warming up...' && \
+    uvicorn backend.api.main:app --host 0.0.0.0 --port 8000"]

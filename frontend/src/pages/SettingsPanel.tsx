@@ -1,154 +1,196 @@
-import React, { useState } from 'react';
-import { adminApi } from '../api';
+import React, { useState, useEffect } from 'react';
 import { 
-  Database, RefreshCw, AlertCircle, 
-  Settings, Save, Search, 
-  Trash2, FileText, Activity 
+  Shield, 
+  Settings, 
+  RotateCcw, 
+  Save, 
+  AlertCircle,
+  Truck,
+  DollarSign,
+  TrendingUp,
+  LayoutGrid
 } from 'lucide-react';
+import { settingsApi, fleetApi } from '../api';
 
-export default function SettingsPanel() {
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [impactWeights, setImpactWeights] = useState({
-    safety: 0.5,
-    operational: 0.3,
-    cost: 0.2
-  });
+const SettingsPanel = () => {
+    const [weights, setWeights] = useState({ safety: 0.5, operational: 0.3, cost: 0.2 });
+    const [previewChanges, setPreviewChanges] = useState<number | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [overview, setOverview] = useState<any>(null);
 
-  const handleSync = async () => {
-    setIsSyncing(true);
-    try {
-      await adminApi.regenerateData();
-      alert('Risk database synchronized with latest operational data.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+    useEffect(() => {
+        fleetApi.getOverview().then(setOverview);
+    }, []);
 
-  const handleWeightChange = (field: keyof typeof impactWeights, val: string) => {
-    setImpactWeights(prev => ({ ...prev, [field]: parseFloat(val) }));
-  };
-
-  return (
-    <div className="space-y-8 animate-fade-in max-w-4xl mx-auto">
-      <header className="mb-10 text-center">
-        <p className="text-blue-500 font-bold tracking-widest uppercase text-xs mb-4">RBAMPS Core</p>
-        <h1 className="text-5xl font-black text-white p-0 m-0">System Settings</h1>
-        <p className="text-slate-500 font-medium mt-4">Manage risk engine parameters, data pipelines, and security protocols.</p>
-      </header>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Risk Engine Weights */}
-        <div className="glass-card">
-          <div className="flex items-center gap-3 mb-8">
-            <Activity className="text-blue-500" size={24} />
-            <h3 className="text-xl font-black text-white uppercase tracking-tighter">Risk Impact Weights</h3>
-          </div>
-          <div className="space-y-6">
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-xs font-black uppercase text-slate-500">Safety Criticality</label>
-                <span className="text-sm font-black text-white">{(impactWeights.safety * 100).toFixed(0)}%</span>
-              </div>
-              <input 
-                type="range" min="0" max="1" step="0.05"
-                value={impactWeights.safety}
-                onChange={(e) => handleWeightChange('safety', e.target.value)}
-                className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-blue-500"
-              />
-            </div>
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-xs font-black uppercase text-slate-500">Operational Continuity</label>
-                <span className="text-sm font-black text-white">{(impactWeights.operational * 100).toFixed(0)}%</span>
-              </div>
-              <input 
-                type="range" min="0" max="1" step="0.05"
-                value={impactWeights.operational}
-                onChange={(e) => handleWeightChange('operational', e.target.value)}
-                className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-purple-500"
-              />
-            </div>
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-xs font-black uppercase text-slate-500">Economic Impact</label>
-                <span className="text-sm font-black text-white">{(impactWeights.cost * 100).toFixed(0)}%</span>
-              </div>
-              <input 
-                type="range" min="0" max="1" step="0.05"
-                value={impactWeights.cost}
-                onChange={(e) => handleWeightChange('cost', e.target.value)}
-                className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-amber-500"
-              />
-            </div>
-            <div className="pt-4">
-               <button className="btn-primary w-full flex items-center justify-center gap-2">
-                 <Save size={16} /> Update Weights
-               </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Data Management */}
-        <div className="glass-card">
-          <div className="flex items-center gap-3 mb-8">
-            <Database className="text-amber-500" size={24} />
-            <h3 className="text-xl font-black text-white uppercase tracking-tighter">Data Pipeline</h3>
-          </div>
-          <div className="space-y-6">
-            <div className="p-5 rounded-2xl bg-white/5 border border-white/5">
-              <div className="flex justify-between items-start mb-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Operation</p>
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-              </div>
-              <p className="text-sm font-black text-white uppercase mb-2">Full Telemetry Refresh</p>
-              <p className="text-xs text-slate-500 font-medium mb-6 leading-relaxed">
-                Recomputes failure probabilities across 12,000+ data points using the latest trained weights.
-              </p>
-              <button 
-                onClick={handleSync}
-                disabled={isSyncing}
-                className="glass w-full py-2.5 rounded-xl text-xs font-black uppercase text-slate-300 hover:text-white flex items-center justify-center gap-2 transition-all"
-              >
-                <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
-                {isSyncing ? 'Syncing...' : 'Run Deep Sync'}
-              </button>
-            </div>
+    const handleWeightChange = (key: 'safety' | 'operational' | 'cost', value: number) => {
+        const otherKeys = (['safety', 'operational', 'cost'] as const).filter(k => k !== key);
+        const diff = value - weights[key];
+        
+        // Redistribute diff proportionally across other two
+        const otherSum = weights[otherKeys[0]] + weights[otherKeys[1]];
+        if (otherSum === 0) {
+            // Equal redistribution if others are 0
+            const newVal = Math.max(0, (1 - value) / 2);
+            setWeights({ ...weights, [key]: value, [otherKeys[0]]: newVal, [otherKeys[1]]: newVal });
+        } else {
+            const ratio0 = weights[otherKeys[0]] / otherSum;
+            const ratio1 = weights[otherKeys[1]] / otherSum;
             
-            <div className="flex gap-4">
-              <button className="glass flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-slate-500 hover:text-red-500 transition-all">
-                <Trash2 size={14} /> Wipe Cache
-              </button>
-              <button className="glass flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-slate-500 hover:text-white transition-all">
-                <FileText size={14} /> Audit Log
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+            const newWeights = {
+                ...weights,
+                [key]: value,
+                [otherKeys[0]]: Math.max(0, weights[otherKeys[0]] - (diff * ratio0)),
+                [otherKeys[1]]: Math.max(0, weights[otherKeys[1]] - (diff * ratio1))
+            };
+            
+            // Normalize to ensure sum = 1.0 due to float precision
+            const sum = newWeights.safety + newWeights.operational + newWeights.cost;
+            newWeights.safety /= sum;
+            newWeights.operational /= sum;
+            newWeights.cost /= sum;
+            
+            setWeights(newWeights);
+        }
+        
+        // Simple preview logic: simulated change count for demo
+        setPreviewChanges(Math.floor(Math.random() * 25) + 5); 
+    };
 
-      {/* Security Check */}
-      <div className="rounded-2xl bg-red-600/5 border border-red-600/20 p-8 flex items-start gap-6">
-         <div className="p-4 rounded-2xl bg-red-600/10 text-red-500 shadow-[0_0_20px_rgba(220,38,38,0.1)]">
-            <AlertCircle size={32} />
-         </div>
-         <div>
-            <h4 className="text-xl font-black text-white uppercase tracking-tighter mb-2">System Guardrails</h4>
-            <p className="text-sm text-slate-400 font-medium leading-relaxed mb-6">
-              Administrative actions in this panel directly affect fleet availability. Ensure all impact weight 
-              changes are validated by the maintenance engineering board before being pushed to production models.
-            </p>
-            <div className="flex gap-4">
-               <div className="bg-white/5 px-4 py-2 rounded-lg flex items-center gap-2 border border-white/5">
-                  <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_#10b981]"></div>
-                  <span className="text-[10px] font-black text-slate-200 uppercase">ML Model Verified</span>
-               </div>
-               <div className="bg-white/5 px-4 py-2 rounded-lg flex items-center gap-2 border border-white/5">
-                  <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]"></div>
-                  <span className="text-[10px] font-black text-slate-200 uppercase">Risk Engine v2.4</span>
-               </div>
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await settingsApi.updateWeights(weights);
+            const res = await fleetApi.getOverview();
+            setOverview(res);
+            setPreviewChanges(null);
+            alert("Risk engine recalibrated with new impact weights.");
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleReset = () => {
+        setWeights({ safety: 0.5, operational: 0.3, cost: 0.2 });
+        setPreviewChanges(null);
+    };
+
+    return (
+        <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+                        <Settings className="w-8 h-8 text-blue-500" />
+                        Risk Parameters
+                    </h1>
+                    <p className="text-slate-400 mt-1">Configure the relative weights of the maintenance impact engine.</p>
+                </div>
             </div>
-         </div>
-      </div>
-    </div>
-  );
-}
+
+            <div className="bg-slate-900/50 border border-white/10 rounded-3xl p-8 backdrop-blur-xl space-y-12">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center text-sm font-bold text-slate-500 uppercase tracking-widest">
+                    <div className="space-y-4">
+                        <div className="bg-rose-500/10 p-4 rounded-2xl border border-rose-500/10">
+                            <Shield className="w-8 h-8 text-rose-500 mx-auto mb-2" />
+                            <span className="text-rose-500">Flight Safety</span>
+                            <div className="text-2xl text-white mt-2">{(weights.safety * 100).toFixed(0)}%</div>
+                        </div>
+                        <input 
+                            type="range" min="0" max="1" step="0.01" 
+                            value={weights.safety} 
+                            onChange={(e) => handleWeightChange('safety', parseFloat(e.target.value))}
+                            className="w-full h-2 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-rose-500" 
+                        />
+                    </div>
+                    
+                    <div className="space-y-4">
+                        <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/10">
+                            <Truck className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                            <span className="text-amber-500">Operational</span>
+                            <div className="text-2xl text-white mt-2">{(weights.operational * 100).toFixed(0)}%</div>
+                        </div>
+                        <input 
+                            type="range" min="0" max="1" step="0.01" 
+                            value={weights.operational} 
+                            onChange={(e) => handleWeightChange('operational', parseFloat(e.target.value))}
+                            className="w-full h-2 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-amber-500" 
+                        />
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="bg-blue-500/10 p-4 rounded-2xl border border-blue-500/10">
+                            <DollarSign className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                            <span className="text-blue-500">Repair Cost</span>
+                            <div className="text-2xl text-white mt-2">{(weights.cost * 100).toFixed(0)}%</div>
+                        </div>
+                        <input 
+                            type="range" min="0" max="1" step="0.01" 
+                            value={weights.cost} 
+                            onChange={(e) => handleWeightChange('cost', parseFloat(e.target.value))}
+                            className="w-full h-2 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-blue-500" 
+                        />
+                    </div>
+                </div>
+
+                {previewChanges !== null && (
+                    <div className="bg-blue-600/10 border border-blue-500/20 rounded-2xl p-6 flex items-center justify-between text-blue-400">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-blue-600/20 p-2 rounded-xl">
+                                <TrendingUp className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold">Recalculation Preview</h3>
+                                <p className="text-sm opacity-80">This change will shift {previewChanges} components across priority tiers.</p>
+                            </div>
+                        </div>
+                        <div className="text-xs font-black uppercase tracking-tighter bg-blue-500/20 px-3 py-1 rounded">SIMULATED</div>
+                    </div>
+                )}
+
+                <div className="flex flex-col md:flex-row items-center justify-center gap-4 pt-4">
+                    <button 
+                        onClick={handleReset}
+                        className="flex items-center gap-2 px-8 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl font-bold transition-all hover:scale-105"
+                    >
+                        <RotateCcw className="w-5 h-5" />
+                        Reset to Defaults
+                    </button>
+                    <button 
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="flex items-center gap-2 px-12 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-600/20 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                    >
+                        <Save className="w-5 h-5" />
+                        {isSaving ? "RECALCULATING..." : "COMMIT CHANGES"}
+                    </button>
+                </div>
+            </div>
+
+            {/* Help Detail */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+                <div className="bg-slate-900/50 border border-white/5 rounded-3xl p-6 backdrop-blur-sm">
+                    <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-emerald-500" />
+                        Impact Sensitivity
+                    </h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">
+                        Increasing the <strong>Safety Weight</strong> prioritizes components critical for flightworthiness, regardless of cost.
+                        Reducing <strong>Operational Weight</strong> will de-prioritize non-safety related interior defects or cabin entertainment.
+                    </p>
+                </div>
+                <div className="bg-slate-900/50 border border-white/5 rounded-3xl p-6 backdrop-blur-sm">
+                    <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                        <LayoutGrid className="w-4 h-4 text-emerald-500" />
+                        Normalization
+                    </h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">
+                        The system automatically normalizes weights to sum to 100%. Moving one slider will redistribute the remaining mass proportionally across the other two parameters.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default SettingsPanel;

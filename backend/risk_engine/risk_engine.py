@@ -1,93 +1,107 @@
 import os
 import pandas as pd
+import numpy as np
 from sqlalchemy import create_engine, text
-from datetime import datetime, date
+import pickle
+from datetime import datetime
 
 DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localhost:5432/risk_db")
 engine = create_engine(DB_URL)
 
-def calculate_risk(safety_w=0.5, operational_w=0.3, cost_w=0.2):
-    print(f"Starting Risk Calculation Engine (Weights: S={safety_w}, O={operational_w}, C={cost_w})...")
+def calculate_risk(weights=None):
+    """
+    Vectorized risk engine for fleet-scale prioritization.
+    Weights default to: {safety: 0.5, operational: 0.3, cost: 0.2}
+    """
+    print(f"--- Running Vectorized Risk Engine (Weights: {weights}) ---")
+    start_time = datetime.now()
     
-    # 1. Load Probabilities (from risk_score where only failure_probability is populated currently)
-    df_risk = pd.read_sql("SELECT component_id, failure_probability FROM risk_score", engine)
-    
-    # 2. Load Components for Impact sub-scores
-    df_comps = pd.read_sql("SELECT component_id, safety_impact, operational_impact, cost_impact FROM component", engine)
-    
-    # Merge
-    df = pd.merge(df_risk, df_comps, on='component_id')
-    
-    # 3. Impact Calculation
-    # Impact = (0.5 × Safety) + (0.3 × Operational) + (0.2 × Cost)
-    df['impact_score'] = (safety_w * df['safety_impact']) + \
-                        (operational_w * df['operational_impact']) + \
-                        (cost_w * df['cost_impact'])
-    
-    # 4. Risk Score Calculation
-    # Risk Score = P(failure) × Impact
-    df['risk_score'] = df['failure_probability'] * df['impact_score']
-    
-    # 5. Assign Priority Tiers
-    # - HIGH (Risk > 0.60) → Immediate inspection within 24 hours
-    # - MEDIUM (0.30–0.60) → Scheduled maintenance within 7 days
-    # - LOW (< 0.30) → Monitor, no immediate action
-    def get_risk_level(score):
-        if score > 0.6: return "HIGH"
-        elif score >= 0.3: return "MEDIUM"
-        else: return "LOW"
-            
-    df['risk_level'] = df['risk_score'].apply(get_risk_level)
-    df['computed_at'] = pd.Timestamp.now()
-    
-    # Update risk_score table
-    with engine.connect() as con:
-        con.execute(text("TRUNCATE TABLE risk_score RESTART IDENTITY;"))
-        con.commit()
-    
-    df_final_risk = df[['component_id', 'failure_probability', 'impact_score', 'risk_score', 'risk_level', 'computed_at']]
-    df_final_risk.to_sql('risk_score', engine, if_exists='append', index=False)
-    
-    # 6. Save to Risk Trend (Daily Snapshot)
-    today = date.today()
-    df_trend = df[['component_id', 'risk_score']].copy()
-    df_trend['timestamp'] = today
-    
-    # Avoid duplicate trend entries for the same day
-    with engine.connect() as con:
-        con.execute(text(f"DELETE FROM risk_trend WHERE timestamp = '{today}'"))
-        con.commit()
-    df_trend.to_sql('risk_trend', engine, if_exists='append', index=False)
-    
-    # 7. Generate Maintenance Priorities
-    generate_priorities(df)
-
-def generate_priorities(df):
-    print("Generating Maintenance Priority List...")
-    
-    # Sort by risk score descending
-    df_ranked = df.sort_values(by='risk_score', ascending=False).reset_index(drop=True)
-    df_ranked['priority_rank'] = df_ranked.index + 1
-    
-    def get_action(level):
-        if level == "HIGH": return "Immediate inspection within 24 hours"
-        elif level == "MEDIUM": return "Scheduled maintenance within 7 days"
-        else: return "Monitor, no immediate action"
-
-    df_ranked['recommended_action'] = df_ranked['risk_level'].apply(get_action)
-    df_ranked['generated_at'] = pd.Timestamp.now()
-    
-    df_prio = df_ranked[['component_id', 'priority_rank', 'risk_score', 'recommended_action', 'generated_at']]
-    
-    with engine.connect() as con:
-        con.execute(text("TRUNCATE TABLE maintenance_priority RESTART IDENTITY;"))
-        con.commit()
+    if weights is None:
+        weights = {"safety": 0.5, "operational": 0.3, "cost": 0.2}
         
-    df_prio.to_sql('maintenance_priority', engine, if_exists='append', index=False)
-    print(f"Priority list updated: {len(df_prio)} components ranked.")
+    # 1. Load Data
+    # We use component_features as base because it already has all 16+ features pre-computed
+    df_features = pd.read_sql("SELECT * FROM component_features", engine)
+    df_comp_meta = pd.read_sql("SELECT component_id, safety_score, operational_score, cost_score FROM component", engine)
+    
+    # 2. Get Failure Probabilities from ML Model
+    try:
+        with open("models/model_v3.pkl", "rb") as f:
+            model = pickle.load(f)
+    except FileNotFoundError:
+        print("Model file not found. Falling back to simple heuristic for first run.")
+        # Heuristic: prob based on age and sensors
+        probs = (df_features['mtbf_ratio'] * 0.5) + (df_features['sensor_mean_7d'] / 200.0 * 0.5)
+        df_features['failure_probability'] = probs.clip(0, 1)
+    else:
+        # ML Model Inference
+        X = df_features # Feature engineering ensures columns match ColumnTransformer
+        probs = model.predict_proba(X)[:, 1]
+        df_features['failure_probability'] = probs
 
-if __name__ == "__main__":
-    calculate_risk()
+    # 3. Vectorized Risk Score Computation
+    df_merged = df_features.merge(df_comp_meta, on='component_id')
+    
+    # Impact = (w1 x Safety) + (w2 x Operational) + (w3 x Cost)
+    df_merged['impact_score'] = (
+        weights['safety'] * df_merged['safety_score'] +
+        weights['operational'] * df_merged['operational_score'] +
+        weights['cost'] * df_merged['cost_score']
+    )
+    
+    # Risk Score = P(failure) x Impact
+    df_merged['risk_score'] = df_merged['failure_probability'] * df_merged['impact_score']
+    
+    # Risk Level
+    def get_tier(score):
+        if score > 0.60: return "HIGH"
+        if score > 0.30: return "MEDIUM"
+        return "LOW"
+    
+    df_merged['risk_level'] = df_merged['risk_score'].apply(get_tier)
+    
+    # 4. Detect Tier Changes (vs Last Snapshot)
+    # Get last snapshot for comparison
+    try:
+        last_snap = pd.read_sql("""
+            SELECT component_id, risk_level as last_level 
+            FROM risk_snapshot 
+            WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM risk_snapshot)
+        """, engine)
+    except:
+        last_snap = pd.DataFrame(columns=['component_id', 'last_level'])
+        
+    if not last_snap.empty:
+        df_merged = df_merged.merge(last_snap, on='component_id', how='left')
+        df_merged['tier_changed_to_high'] = (
+            (df_merged['risk_level'] == 'HIGH') & 
+            (df_merged['last_level'] != 'HIGH')
+        ).astype(int)
+    else:
+        df_merged['tier_changed_to_high'] = 0
+
+    # 5. Store Snapshot
+    df_snap = pd.DataFrame({
+        "component_id": df_merged["component_id"],
+        "snapshot_date": datetime.now(),
+        "failure_probability": df_merged["failure_probability"],
+        "impact_score": df_merged["impact_score"],
+        "risk_score": df_merged["risk_score"],
+        "risk_level": df_merged["risk_level"],
+        "is_training_instance": False, # Live recomputation
+        "failure_label": 0 # Live recomputation
+    })
+    
+    df_snap.to_sql('risk_snapshot', engine, if_exists='append', index=False)
+    
+    # Clean up old snapshots (Optional: Keep last 30 days)
+    # with engine.connect() as con:
+    #     con.execute(text("DELETE FROM risk_snapshot WHERE snapshot_date < NOW() - INTERVAL '30 days'"))
+    #     con.commit()
+    
+    elapsed = (datetime.now() - start_time).total_seconds()
+    print(f"Risk computation complete for {len(df_merged)} components in {elapsed:.2f} seconds.")
+    return len(df_merged), elapsed
 
 if __name__ == "__main__":
     calculate_risk()

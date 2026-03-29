@@ -9,105 +9,150 @@ DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localho
 engine = create_engine(DB_URL)
 
 def run_feature_engineering():
-    print("Starting Feature Engineering...")
+    print("--- Starting Complex Feature Engineering (Alignment v3) ---")
     
-    # 1. Load data
+    # 1. Load Data
     df_comps = pd.read_sql("SELECT * FROM component", engine)
     df_aircraft = pd.read_sql("SELECT * FROM aircraft", engine)
     df_maint = pd.read_sql("SELECT * FROM maintenance_log", engine)
-    df_sensors = pd.read_sql("SELECT * FROM sensor_data WHERE timestamp >= NOW() - INTERVAL '30 days'", engine)
+    df_sensors = pd.read_sql("SELECT * FROM sensor_data WHERE timestamp >= NOW() - INTERVAL '60 days'", engine)
     df_flights = pd.read_sql("SELECT * FROM flight_operations WHERE departure_time >= NOW() - INTERVAL '30 days'", engine)
     
-    now = pd.Timestamp.now()
+    now = datetime.now()
     features_list = []
     
+    # Pre-encode static lookups
+    climate_dummies = pd.get_dummies(df_aircraft['climate_zone'], prefix='climate')
+    system_dummies = pd.get_dummies(df_comps['system_category'], prefix='system')
+    
     for _, comp in df_comps.iterrows():
-        comp_id = comp['component_id']
+        c_id = comp['component_id']
         ac_id = comp['aircraft_id']
+        ac = df_aircraft[df_aircraft['aircraft_id'] == ac_id].iloc[0]
         
+        # Filtering for speed
+        c_maint = df_maint[df_maint['component_id'] == c_id].copy()
+        c_sensors = df_sensors[df_sensors['component_id'] == c_id].copy()
+        ac_flights = df_flights[df_flights['aircraft_id'] == ac_id].copy()
+        
+        # Base Features
         # 1. days_since_last_maintenance
-        comp_maint = df_maint[df_maint['component_id'] == comp_id]
-        if not comp_maint.empty:
-            last_maint_date = pd.to_datetime(comp_maint['maintenance_date']).max()
-            days_since_maint = (now - last_maint_date).days
+        if not c_maint.empty:
+            last_maint = pd.to_datetime(c_maint['maintenance_date']).max()
+            days_since_maint = (now - last_maint.to_pydatetime()).days
+            last_type = c_maint.loc[c_maint['maintenance_date'].idxmax(), 'maintenance_type']
+            was_last_predictable = c_maint.loc[c_maint['maintenance_date'].idxmax(), 'was_predictable']
         else:
-            days_since_maint = (now - pd.to_datetime(comp['installation_date'])).days
+            days_since_maint = (now - pd.to_datetime(comp['installation_date']).to_pydatetime()).days
+            last_type = "None"
+            was_last_predictable = False
             
-        # 2. historical_failure_count (unscheduled in past 12 months)
+        # 2. historical_failure_count (12m)
         past_12m = now - timedelta(days=365)
-        failure_count = comp_maint[
-            (comp_maint['type'].str.lower() == 'unscheduled') & 
-            (pd.to_datetime(comp_maint['maintenance_date']) >= past_12m)
+        failures_12m = c_maint[
+            (c_maint['maintenance_type'].str.lower() == 'unscheduled') & 
+            (pd.to_datetime(c_maint['maintenance_date']) >= past_12m)
         ].shape[0]
         
         # 3. component_age_hours
-        comp_age_hours = comp['age_hours']
+        age_hours = comp['age_hours']
+        mtbf_ratio = age_hours / comp['mtbf'] if comp['mtbf'] > 0 else 0
         
-        # Sensor data for this component
-        comp_sensors = df_sensors[df_sensors['component_id'] == comp_id]
+        # Sensor aggregates (7d and 30d)
+        past_7d = now - timedelta(days=7)
+        past_30d = now - timedelta(days=30)
+        
+        s_7d = c_sensors[pd.to_datetime(c_sensors['timestamp']) >= past_7d]
+        s_30d = c_sensors[pd.to_datetime(c_sensors['timestamp']) >= past_30d]
         
         # 4 & 5. sensor_mean_7d, sensor_std_7d
-        past_7d = now - timedelta(days=7)
-        sensors_7d = comp_sensors[pd.to_datetime(comp_sensors['timestamp']) >= past_7d]
-        if not sensors_7d.empty:
-            s_mean = sensors_7d['value'].mean()
-            s_std = sensors_7d['value'].std()
+        if not s_7d.empty:
+            s_mean = s_7d['value'].mean()
+            s_std = s_7d['value'].std()
+            miss_rate_7d = s_7d['is_missing'].fillna(False).mean()
         else:
-            s_mean = 0.0
-            s_std = 0.0
+            s_mean, s_std, miss_rate_7d = 0.0, 0.0, 0.0
             
-        # 6. sensor_trend_slope (30 days)
-        if len(comp_sensors) >= 5:
-            # Convert timestamp to ordinal for regression
-            x = pd.to_datetime(comp_sensors['timestamp']).apply(lambda t: t.to_ordinal()).values
-            y = comp_sensors['value'].values
-            slope, _, _, _, _ = linregress(x, y)
-        else:
-            slope = 0.0
-            
+        # 6. sensor_trend_slope (30d)
+        if len(s_30d) >= 5:
+            # Drop missing values for slope
+            s_30d_cl = s_30d.dropna(subset=['value'])
+            if len(s_30d_cl) >= 5:
+                # Convert timestsamp to ordinal for regression
+                x = pd.to_datetime(s_30d_cl['timestamp']).apply(lambda t: t.to_pydatetime().toordinal()).values
+                y = s_30d_cl['value'].values
+                slope, _, _, _, _ = linregress(x, y)
+            else: slope = 0.0
+        else: slope = 0.0
+        
+        # 10. anomaly_count_30d
+        ano_count_30d = s_30d['is_anomaly'].fillna(False).sum()
+        
         # 7. aircraft_age_years
-        ac_info = df_aircraft[df_aircraft['aircraft_id'] == ac_id]
-        if not ac_info.empty:
-            ac_age_years = (now - pd.to_datetime(ac_info['manufacture_date'].iloc[0])).days / 365.25
-        else:
-            ac_age_years = 0.0
-            
-        # 8. flight_cycles_30d
-        ac_flights = df_flights[df_flights['aircraft_id'] == ac_id]
+        ac_age = (now - pd.to_datetime(ac['manufacture_date']).to_pydatetime()).days / 365.25
+        
+        # 8 & 9. Flights / Utilization
         cycles_30d = ac_flights['cycles_incremented'].sum()
+        util = ac_flights['duration_hours'].sum() / (30 * 12.0) # Utilization vs 12h peak
         
-        # 9. utilization_intensity (actual / planned)
-        # Assuming planned is 12 hours/day
-        actual_hours = ac_flights['duration_hours'].sum()
-        planned_hours = 30 * 12.0
-        utilization = actual_hours / planned_hours if planned_hours > 0 else 0
+        # --- LABEL GENERATION (Lookahead 30 days) ---
+        # The data generator creates records in the FUTURE relative to NOW in generator.py
+        # But for training instances, we snapshot at 'now' and check if failure happened in next 30 days.
+        lookahead = now + timedelta(days=30)
+        future_fail = c_maint[
+            (c_maint['maintenance_type'].str.lower() == 'unscheduled') &
+            (pd.to_datetime(c_maint['maintenance_date']) > now) & 
+            (pd.to_datetime(c_maint['maintenance_date']) <= lookahead)
+        ]
+        label = 1 if not future_fail.empty else 0
         
-        features_list.append({
-            "component_id": comp_id,
+        # Compile record
+        rec = {
+            "component_id": c_id,
             "days_since_last_maintenance": float(days_since_maint),
-            "historical_failure_count": int(failure_count),
-            "component_age_hours": float(comp_age_hours),
+            "historical_failure_count": int(failures_12m),
+            "component_age_hours": float(age_hours),
             "sensor_mean_7d": float(s_mean),
             "sensor_std_7d": float(s_std),
             "sensor_trend_slope": float(slope),
-            "aircraft_age_years": float(ac_age_years),
+            "aircraft_age_years": float(ac_age),
             "flight_cycles_30d": int(cycles_30d),
-            "utilization_intensity": float(utilization),
-            "feature_timestamp": now
-        })
+            "utilization_intensity": float(util),
+            "anomaly_count_30d": int(ano_count_30d),
+            "missing_data_rate_7d": float(miss_rate_7d),
+            "was_last_maintenance_predictable": bool(was_last_predictable),
+            "mtbf_ratio": float(mtbf_ratio),
+            "label": int(label),
+            "snapshot_date": now,
+            "aircraft_id_group": ac_id # For GroupKFold
+        }
         
-    df_features = pd.DataFrame(features_list)
+        # Add One-Hot Encodings manually or via concat? concat is better.
+        # climate_ Tropical, system_ Propulsion, etc.
+        # But we'll do that at the DataFrame level for efficiency.
+        features_list.append(rec)
+        
+    df_final = pd.DataFrame(features_list)
+    df_final = df_final.fillna(0) # Ensure no NaNs from std() or linregress
     
-    # Save to database
-    with engine.connect() as con:
-        con.execute(text("TRUNCATE TABLE component_features RESTART IDENTITY;"))
-        con.commit()
+    # Save to dynamic table (component_features) for ML model training consumption
+    # We'll save the raw features + label. Categorical encoding will happen in ML model script.
+    # But for demonstration, let's also save the climate_zone and system_category in df_final
+    # after merging from comps/ac metadata.
+    df_meta_ac = df_aircraft[['aircraft_id', 'climate_zone']]
+    df_meta_comp = df_comps[['component_id', 'system_category']]
     
-    df_features.to_sql('component_features', engine, if_exists='append', index=False)
-    print(f"Feature engineering completed. Wrote {len(df_features)} records.")
+    df_final = df_final.merge(df_meta_ac, left_on='aircraft_id_group', right_on='aircraft_id')
+    df_final = df_final.merge(df_meta_comp, on='component_id')
+    
+    # if_exists='replace' drops and recreates correctly
+    df_final.to_sql('component_features', engine, if_exists='replace', index=False)
+    print(f"Feature engineering complete. Prepared {len(df_final)} instances with {label_ratio(df_final)} positive labels.")
 
-if __name__ == "__main__":
-    run_feature_engineering()
+def label_ratio(df):
+    pos = df['label'].sum()
+    total = len(df)
+    return f"{pos}/{total} ({pos/total:.2%})"
 
 if __name__ == "__main__":
     run_feature_engineering()
