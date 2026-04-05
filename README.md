@@ -1,85 +1,85 @@
-# Risk-Based Aircraft Maintenance Prioritization System
+# 🛡️ AeroGuard: Risk-Based Aircraft Maintenance Prediction
 
-This is a complete end-to-end system for prioritizing aircraft maintenance actions based on a risk framework.
+![AeroGuard Banner](docs/assets/aeroguard_banner.png)
 
-> **Risk Score = Failure Probability × Impact**
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
-The system predicts component failures using machine learning and evaluates their operational/safety impacts to rank maintenance priorities.
+**AeroGuard** is a sophisticated end-to-end framework designed to prioritize aircraft maintenance through a rigorous risk-assessment engine. By blending real-time telemetry, predictive machine learning, and operational impact analysis, AeroGuard ensures that critical issues are addressed before they compromise safety or scheduling.
 
-## Architecture
+> **Risk Score = Failure Probability × Operational Impact**
 
-1. **Database Layer (PostgreSQL)**: Stores aircraft telemetry, component data, maintenance logs, and prioritized risk metrics.
-2. **Machine Learning & Data Generator (Python)**:
-    *   Generates synthetic flight operations, sensor readings, and maintenance events.
-    *   Extracts aggregated features (Feature Engineering).
-    *   Predicts 30-day failure probabilities using a Logistic Regression model (tracked via MLflow).
-    *   Computes final risk scores and maintenance priorities using an impact-weighting engine.
-3. **Backend API (FastAPI)**: Serves fleet data, individual component telemetry, risk distributions, and priority lists. Includes a webhook to re-trigger the ML pipeline.
-4. **Frontend Dashboard (React + Vite + TailwindCSS)**: Visualizes clear fleet-level overviews, prioritized maintenance lists, and drill-down views into sensor trends for components.
+---
 
-## Prerequisites
+## 🏗️ System Architecture
 
-- [Docker](https://docs.docker.com/get-docker/)
+AeroGuard employs a modern 4-tier containerized architecture for maximum scalability and reliability:
+
+1.  **📊 Database Layer (PostgreSQL)**: The source of truth for aircraft telemetry, component health histories, and maintenance logs.
+2.  **🧠 Risk Engine & ML (Python)**:
+    *   **Data Generation**: Simulates complex flight operations and sensor fluctuations.
+    *   **Feature Engineering**: Extracts high-fidelity health indicators from raw telemetry.
+    *   **ML Pipeline**: Predicts failure probabilities using an MLflow-tracked Logistic Regression model.
+3.  **🔌 Backend API (FastAPI)**: A high-performance gateway serving risk distributions, fleet analytics, and maintenance priority lists.
+4.  **🖥️ Frontend Dashboard (React + Vite)**: A premium, dark-mode specialized interface for real-time fleet monitoring and decision support.
+
+---
+
+## ✨ Key Features
+
+*   **📈 Fleet Health Monitoring**: A high-level command center displaying critical KPIs, risk distributions, and fleet-wide maintenance status.
+*   **⚖️ Dynamic Priority Board**: An intelligent, sortable ranking system that calculates urgency based on component severity and failure likelihood.
+*   **🔍 Telemetry Deep-Dive**: Granular visualization of sensor trends (Temperature, Vibration, Pressure) for every component in the fleet.
+*   **⚡ On-Demand Recomputation**: Instantly trigger the ML pipeline via the dashboard to process fresh telemetry and update risk scores in real-time.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+Ensure you have the following installed:
+- [Docker Desktop](https://docs.docker.com/get-docker/)
 - [Docker Compose](https://docs.docker.com/compose/install/)
 
-## Running the Application
+### Installation & Deployment
 
-The entire application stack is containerized and managed via Docker Compose.
-
-1.  **Clone the repository** (or navigate to the project directory):
+1.  **Clone the Repository**
     ```bash
-    cd risk-based-aircraft-maintenance
+    git clone https://github.com/geeky-bhawuk-arora/AeroGuard.git
+    cd AeroGuard
     ```
 
-2.  **Build and Start the Containers:**
+2.  **Launch the Infrastructure**
     ```bash
     docker-compose up --build
     ```
-    This command will spin up 4 services:
-    *   `db`: PostgreSQL database on port `5432`.
-    *   `ml-service`: Runs the Python data generator and ML pipeline on startup.
-    *   `backend`: FastAPI server available on port `8000`.
-    *   `frontend`: React application available on port `5173`.
+    This command orchestrates four primary services:
+    - `db`: PostgreSQL persistence (Port `5432`)
+    - `ml-service`: Lifecycle generator and ML training
+    - `backend`: FastAPI Gateway (Port `8000`)
+    - `frontend`: Vite Dashboard (Port `5173`)
 
-## Accessing the System
+3.  **Access the Dashboard**
+    Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-Once the containers are successfully running, access the interfaces:
+---
 
-*   **Frontend Dashboard:** [http://localhost:5173](http://localhost:5173)
-*   **Backend API Docs (Swagger UI):** [http://localhost:8000/docs](http://localhost:8000/docs)
-
-## Project Structure
+## 📂 Project Structure
 
 ```text
-├── backend/
-│   ├── api/            # FastAPI application routing
-│   ├── db/             # SQLAlchemy schemas and database connection
-│   ├── ml/             # ML Model and Feature Engineering scripts
-│   ├── risk_engine/    # Risk score calculation and priority ranking
-│   └── requirements.txt
-├── data/
-│   ├── generator/      # Synthetic data generator script
-│   └── requirements.txt
-├── docker/
-│   ├── init.sql        # Database initialization script
-│   ├── Dockerfile.backend
-│   ├── Dockerfile.frontend
-│   └── Dockerfile.ml
-├── frontend/           # React + Vite application
-│   ├── src/
-│   ├── index.html
-│   ├── package.json
-│   ├── tailwind.config.js
-│   └── vite.config.ts
-└── docker-compose.yml
+├── backend/            # FastAPI + SQLAlchemy + Business Logic
+├── data/               # Synthetic Telemetry Generators
+├── docker/             # Dockerfiles & Service Configurations
+├── frontend/           # React + Tailwind Dashboard
+└── docs/               # Technical Documentation & Assets
 ```
 
-## Dashboard Features
+---
 
-1.  **Fleet Overview:** High-level metrics showing total aircraft, high-risk counts, and an aggregated distribution chart of component risk levels.
-2.  **Priority Board:** An actionable, sortable table ranking components based on their computed risk score and severity. Displays required actions (e.g. "Immediate Inspection").
-3.  **Component Health:** Detailed drill-down view showing real-time telemetry (Temperature and Vibration charts) alongside component-specific failure probabilities.
+## 👨‍💻 Author
 
-## Recomputing Risk
-
-To simulate real-time ML retraining or ad-hoc data processing, use the **Recompute Risk** button located in the dashboard sidebar. This queries the backend, asynchronously kicking off the Python ML Pipeline, predicting fresh probability sets, and overriding the Priority Table.
+Developed with care by **[Bhawuk Arora](https://github.com/geeky-bhawuk-arora)**.  
+*Building the future of predictive aviation safety.*

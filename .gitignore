@@ -53,3 +53,11 @@ pgdata/
 *.swp
 *.swo
 .DS_Store
+
+# Project specific logs and artifacts
+ml_logs.txt
+*.log
+ml_logs/*.txt
+data/processed/
+backend/__pycache__/
+frontend/__pycache__/
