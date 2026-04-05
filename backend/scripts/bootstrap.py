@@ -54,6 +54,7 @@ def bootstrap_data_if_needed(engine):
     print("No risk snapshots found. Bootstrapping synthetic data and initial model artifacts.")
     run_command([sys.executable, "data/generator/generator.py", "--scale", DEFAULT_SCALE])
     run_command([sys.executable, "backend/ml/pipeline.py"])
+    run_command([sys.executable, "backend/scripts/generate_history.py"])
 
 
 def ensure_schema_migrations(engine):

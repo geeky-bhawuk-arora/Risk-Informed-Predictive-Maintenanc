@@ -51,25 +51,27 @@ def run_feature_engineering():
         # 4. Imputation: Fill small gaps with interpolation for more accurate trend analysis
         if not c_sensors.empty:
             c_sensors = c_sensors.sort_values('timestamp')
-            c_sensors['value'] = c_sensors['value'].interpolate(method='linear').fillna(method='bfill').fillna(method='ffill')
+            c_sensors['value'] = c_sensors['value'].interpolate(method='linear').bfill().ffill()
 
         # Base Features
-        # 1. days_since_last_maintenance
-        if not c_maint.empty:
-            last_maint = pd.to_datetime(c_maint['maintenance_date']).max()
+        # 1. days_since_last_maintenance (Only look at PAST events)
+        c_maint_past = c_maint[pd.to_datetime(c_maint['maintenance_date']) <= now].copy()
+        
+        if not c_maint_past.empty:
+            last_maint = pd.to_datetime(c_maint_past['maintenance_date']).max()
             days_since_maint = (now - last_maint.to_pydatetime()).days
-            last_type = c_maint.loc[c_maint['maintenance_date'].idxmax(), 'maintenance_type']
-            was_last_predictable = c_maint.loc[c_maint['maintenance_date'].idxmax(), 'was_predictable']
+            last_type = c_maint_past.loc[c_maint_past['maintenance_date'].idxmax(), 'maintenance_type']
+            was_last_predictable = c_maint_past.loc[c_maint_past['maintenance_date'].idxmax(), 'was_predictable']
         else:
             days_since_maint = (now - pd.to_datetime(comp['installation_date']).to_pydatetime()).days
             last_type = "None"
             was_last_predictable = False
             
-        # 2. historical_failure_count (12m)
+        # 2. historical_failure_count (12m - Bounded by NOW)
         past_12m = now - timedelta(days=365)
-        failures_12m = c_maint[
-            (c_maint['maintenance_type'].str.lower() == 'unscheduled') & 
-            (pd.to_datetime(c_maint['maintenance_date']) >= past_12m)
+        failures_12m = c_maint_past[
+            (c_maint_past['maintenance_type'].str.lower() == 'unscheduled') & 
+            (pd.to_datetime(c_maint_past['maintenance_date']) >= past_12m)
         ].shape[0]
         
         # 3. component_age_hours

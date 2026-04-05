@@ -6,8 +6,9 @@ from datetime import datetime, timedelta
 import random
 
 # Database connection
-DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localhost:5432/risk_db")
-engine = create_engine(DB_URL)
+LOCAL_DB_URL = "postgresql://bhawuk:Bhawuk%4042@localhost:5432/aeroguard_db"
+DOCKER_DB_URL = os.getenv("DATABASE_URL", LOCAL_DB_URL)
+engine = create_engine(DOCKER_DB_URL.replace("@db:5432", "@localhost:5432"))
 
 def generate_historical_snapshots(days=30):
     print(f"--- Generating {days} days of historical risk snapshots ---")

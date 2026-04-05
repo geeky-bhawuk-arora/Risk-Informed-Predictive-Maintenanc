@@ -15,7 +15,7 @@ from sklearn.metrics import (
     f1_score, brier_score_loss, auc, confusion_matrix,
     PrecisionRecallDisplay, RocCurveDisplay, ConfusionMatrixDisplay
 )
-from sklearn.calibration import calibration_curve
+from sklearn.calibration import calibration_curve, CalibratedClassifierCV
 import matplotlib.pyplot as plt
 import mlflow
 import mlflow.sklearn
@@ -84,18 +84,20 @@ def train_and_predict():
     
     models_to_train = {
         "Baseline_Logistic": LogisticRegression(class_weight='balanced', max_iter=1000),
-        "Decision_Tree": DecisionTreeClassifier(max_depth=5, random_state=42),
-        "Random_Forest": RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42),
-        "Primary_GradientBoosting": GradientBoostingClassifier(n_estimators=150, learning_rate=0.05, max_depth=4, random_state=42)
+        "Decision_Tree": DecisionTreeClassifier(max_depth=6, class_weight='balanced', random_state=42),
+        "Random_Forest": RandomForestClassifier(n_estimators=100, max_depth=10, class_weight='balanced', random_state=42),
+        "Primary_GradientBoosting": GradientBoostingClassifier(n_estimators=150, learning_rate=0.04, max_depth=5, random_state=42)
     }
 
     best_prauc = 0
     best_model_name = ""
     best_pipe = None
 
-    for name, clf in models_to_train.items():
+    for name, base_clf in models_to_train.items():
         with mlflow.start_run(run_name=name):
-            pipe = Pipeline([('pre', preprocessor), ('clf', clf)])
+            # Practice: Model Calibration (Ensures risk scores are true probabilities)
+            calibrated_clf = CalibratedClassifierCV(base_clf, cv=3, method='isotonic')
+            pipe = Pipeline([('pre', preprocessor), ('clf', calibrated_clf)])
             pipe.fit(X_train, y_train)
             
             # Eval on test set
@@ -109,11 +111,12 @@ def train_and_predict():
             f1_03 = f1_score(y_test, y_preds)
             brier = brier_score_loss(y_test, y_probs)
             
-            # Feature Importance (if applicable)
-            if hasattr(clf, 'feature_importances_'):
+            # Feature Importance (if applicable - extraction from calibrated wrapper)
+            if hasattr(calibrated_clf.calibrated_classifiers_[0].base_estimator, 'feature_importances_'):
                 ohe_cats = pipe.named_steps['pre'].transformers_[1][1].get_feature_names_out(cat_features)
                 feature_names = num_features + list(ohe_cats)
-                importances = clf.feature_importances_
+                # Average importance across CV folds
+                importances = np.mean([c.base_estimator.feature_importances_ for c in calibrated_clf.calibrated_classifiers_], axis=0)
                 for f_name, imp in zip(feature_names, importances):
                     mlflow.log_metric(f"importance_{f_name}", imp)
 
@@ -144,6 +147,17 @@ def train_and_predict():
             fig_pr.savefig(pr_path)
             mlflow.log_artifact(pr_path)
             plt.close(fig_pr)
+
+            # Reliability Curve (Practice: Uncertainty Visualization)
+            prob_true, prob_pred = calibration_curve(y_test, y_probs, n_bins=10)
+            fig_rel, ax_rel = plt.subplots()
+            ax_rel.plot(prob_pred, prob_true, marker='o', label=name)
+            ax_rel.plot([0, 1], [0, 1], linestyle='--')
+            ax_rel.set_title(f"Reliability Curve: {name}")
+            rel_path = f"/tmp/ml_plots/reliability_{name}.png"
+            fig_rel.savefig(rel_path)
+            mlflow.log_artifact(rel_path)
+            plt.close(fig_rel)
 
             # Confusion Matrix
             fig_cm, ax_cm = plt.subplots()
