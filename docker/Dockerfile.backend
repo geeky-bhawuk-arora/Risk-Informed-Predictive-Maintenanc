@@ -22,7 +22,7 @@ COPY . .
 
 # Set PYTHONPATH to allow absolute imports
 ENV PYTHONPATH=/app
-ENV DATABASE_URL=postgresql://risk_user:risk_password@db:5432/risk_db
+# DATABASE_URL is managed via .env/docker-compose for security.
 ENV MLFLOW_TRACKING_URI=http://mlflow:5000
 
 # Startup script: wait for DB, bootstrap only when the dataset is absent, then start API.

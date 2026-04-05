@@ -13,7 +13,7 @@ import sys
 fake = Faker()
 
 # Database connection
-DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localhost:5432/risk_db")
+DB_URL = os.getenv("DATABASE_URL", "postgresql://bhawuk:Bhawuk%4042@localhost:5432/aeroguard_db")
 engine = create_engine(DB_URL)
 
 # --- MASTER CONFIGURATION ---
@@ -242,12 +242,20 @@ def generate_sensor_data(config, failing_components):
                 else:
                     # Degradation logic: Intensive degradation in the 14 days before failure
                     degradation = 0
+                    # Introduce "False Positives": degradation that looks like a failure but isn't
+                    is_false_alarm = c_id % 7 == 0 
+                    
                     if has_future_failure:
                         days_until_fail = (failure_date - curr).days
                         if 0 <= days_until_fail <= 14:
-                            # Exponential-like degradation as failure approaches
-                            # Starts at 0, goes to ~100+ units of increase
-                            degradation = (15 - days_until_fail)**2.5 / 15.0
+                            # Add noise to degradation: some components degrade faster than others
+                            variability = random.uniform(0.5, 1.5)
+                            degradation = (variability * (15 - days_until_fail)**2.2) / 15.0
+                    elif is_false_alarm:
+                        # Periodic "drift" that mimics degradation but resets
+                        drift_cycle = (curr.timetuple().tm_yday % 30)
+                        if drift_cycle > 20: 
+                            degradation = (drift_cycle - 20)**1.5 / 5.0
                     
                     seasonal = 4.0 * np.sin(2 * np.pi * curr.timetuple().tm_yday / 365) if "Temp" in chan or "EGT" in chan else 0
                     is_ano = random.random() < 0.005

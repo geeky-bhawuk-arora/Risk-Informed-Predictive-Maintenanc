@@ -2,7 +2,8 @@ import os
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine, text
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GroupKFold, cross_validate
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
@@ -11,15 +12,17 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     accuracy_score, roc_auc_score, precision_recall_curve, 
-    f1_score, brier_score_loss, auc, confusion_matrix
+    f1_score, brier_score_loss, auc, confusion_matrix,
+    PrecisionRecallDisplay, RocCurveDisplay, ConfusionMatrixDisplay
 )
 from sklearn.calibration import calibration_curve
+import matplotlib.pyplot as plt
 import mlflow
 import mlflow.sklearn
 import pickle
 from datetime import datetime
 
-DB_URL = os.getenv("DATABASE_URL", "postgresql://risk_user:risk_password@localhost:5432/risk_db")
+DB_URL = os.getenv("DATABASE_URL", "postgresql://bhawuk:Bhawuk%4042@localhost:5432/aeroguard_db")
 engine = create_engine(DB_URL)
 
 def train_and_predict():
@@ -81,8 +84,9 @@ def train_and_predict():
     
     models_to_train = {
         "Baseline_Logistic": LogisticRegression(class_weight='balanced', max_iter=1000),
-        "Primary_GradientBoosting": GradientBoostingClassifier(n_estimators=150, learning_rate=0.05, max_depth=4, random_state=42),
-        "Secondary_RandomForest": GradientBoostingClassifier(n_estimators=100, max_depth=6, random_state=42) # Using GB variant for consistency in importance
+        "Decision_Tree": DecisionTreeClassifier(max_depth=5, random_state=42),
+        "Random_Forest": RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42),
+        "Primary_GradientBoosting": GradientBoostingClassifier(n_estimators=150, learning_rate=0.05, max_depth=4, random_state=42)
     }
 
     best_prauc = 0
@@ -119,6 +123,37 @@ def train_and_predict():
             mlflow.log_metric("pr_auc", pr_auc)
             mlflow.log_metric("f1_at_03", f1_03)
             mlflow.log_metric("brier_score", brier)
+            
+            # --- Artifact Generation: Plots ---
+            os.makedirs("/tmp/ml_plots", exist_ok=True)
+            
+            # ROC Curve
+            fig_roc, ax_roc = plt.subplots()
+            RocCurveDisplay.from_estimator(pipe, X_test, y_test, ax=ax_roc)
+            ax_roc.set_title(f"ROC Curve: {name}")
+            roc_path = f"/tmp/ml_plots/roc_{name}.png"
+            fig_roc.savefig(roc_path)
+            mlflow.log_artifact(roc_path)
+            plt.close(fig_roc)
+            
+            # PR Curve
+            fig_pr, ax_pr = plt.subplots()
+            PrecisionRecallDisplay.from_estimator(pipe, X_test, y_test, ax=ax_pr)
+            ax_pr.set_title(f"PR Curve: {name}")
+            pr_path = f"/tmp/ml_plots/pr_{name}.png"
+            fig_pr.savefig(pr_path)
+            mlflow.log_artifact(pr_path)
+            plt.close(fig_pr)
+
+            # Confusion Matrix
+            fig_cm, ax_cm = plt.subplots()
+            ConfusionMatrixDisplay.from_predictions(y_test, y_preds, ax=ax_cm)
+            ax_cm.set_title(f"Confusion Matrix: {name}")
+            cm_path = f"/tmp/ml_plots/cm_{name}.png"
+            fig_cm.savefig(cm_path)
+            mlflow.log_artifact(cm_path)
+            plt.close(fig_cm)
+            
             mlflow.sklearn.log_model(pipe, f"{name}_pipeline")
             
             print(f"Model {name} trained. PR-AUC: {pr_auc:.3f}")

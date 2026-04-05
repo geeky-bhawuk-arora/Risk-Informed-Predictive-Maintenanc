@@ -58,20 +58,27 @@ def bootstrap_data_if_needed(engine):
 
 def ensure_schema_migrations(engine):
     print("Checking for schema migrations...")
+    needed_columns = {
+        "risk_drivers": "TEXT",
+        "comments": "TEXT",
+        "is_checked": "BOOLEAN DEFAULT FALSE"
+    }
+    
     try:
         with engine.connect() as connection:
-            # Check if risk_drivers column exists in risk_snapshot
-            col_exists_q = text("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.columns 
-                    WHERE table_name = 'risk_snapshot' AND column_name = 'risk_drivers'
-                )
-            """)
-            col_exists = connection.execute(col_exists_q).scalar()
-            if not col_exists:
-                print("Migration: Adding missing 'risk_drivers' column to 'risk_snapshot' table.")
-                connection.execute(text("ALTER TABLE risk_snapshot ADD COLUMN risk_drivers TEXT"))
-                connection.commit()
+            for col_name, col_type in needed_columns.items():
+                col_exists_q = text(f"""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.columns 
+                        WHERE table_name = 'risk_snapshot' AND column_name = :col
+                    )
+                """)
+                col_exists = connection.execute(col_exists_q, {"col": col_name}).scalar()
+                
+                if not col_exists:
+                    print(f"Migration: Adding missing '{col_name}' column to 'risk_snapshot' table.")
+                    connection.execute(text(f"ALTER TABLE risk_snapshot ADD COLUMN {col_name} {col_type}"))
+                    connection.commit()
     except Exception as e:
         print(f"Migration check failed: {e}")
 
