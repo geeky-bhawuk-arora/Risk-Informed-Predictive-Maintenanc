@@ -19,6 +19,7 @@ engine = create_engine(DB_URL)
 # --- MASTER CONFIGURATION ---
 SCALE_TARGETS = {
     "small": {
+        "num_aircraft": 50,
         "history_years": 1,
         "sensor_points_per_day": 3.0, # Increased density for smoother UI charts
         "mtbf_mult": 0.2, # Force failures at small scale
