@@ -81,17 +81,17 @@ const ModelPerformance = () => {
 
             {/* Core Metrics Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard title="AUC-ROC" value={metrics.auc_roc} target="> 0.88" icon={Target} color="blue" />
-                <MetricCard title="PR-AUC" value={metrics.pr_auc} target="> 0.72" icon={Zap} color="emerald" />
-                <MetricCard title="Brier Score" value={metrics.brier_score} target="< 0.08" icon={Binary} color="purple" reverse />
-                <MetricCard title="F1-Score @ 0.3" value={metrics.f1_at_03} target="Max" icon={BarChart3} color="amber" />
+                <MetricCard title="AUC-ROC" value={perf.best_model.metrics.auc_roc} target="> 0.88" icon={Target} color="blue" />
+                <MetricCard title="PR-AUC" value={perf.best_model.metrics.pr_auc} target="> 0.72" icon={Zap} color="emerald" />
+                <MetricCard title="Brier Score" value={perf.best_model.metrics.brier_score} target="< 0.08" icon={Binary} color="purple" reverse />
+                <MetricCard title="F1-Score @ 0.3" value={perf.best_model.metrics.f1_at_03} target="Max" icon={BarChart3} color="amber" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Feature Importance */}
                 <div className="lg:col-span-2 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
                     <div className="flex items-center justify-between mb-8">
-                        <h3 className="text-xl font-bold text-slate-900">Feature Importance Ranking</h3>
+                        <h3 className="text-xl font-bold text-slate-900">Feature Importance: {perf.best_model.model_name}</h3>
                         <div className="flex gap-4 text-[10px] font-black tracking-widest uppercase text-slate-400">
                             <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-sky-500"></div> Sensor</span>
                             <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-purple-500"></div> Maint</span>
@@ -100,7 +100,7 @@ const ModelPerformance = () => {
                     </div>
                     <div className="h-[450px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <RechartsBarChart data={perf.feature_importance} layout="vertical">
+                            <RechartsBarChart data={perf.best_model.feature_importance} layout="vertical">
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                 <XAxis type="number" hide />
                                 <YAxis 
@@ -118,7 +118,7 @@ const ModelPerformance = () => {
                                     contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                 />
                                 <Bar dataKey="importance" radius={[0, 8, 8, 0]} barSize={20}>
-                                    {perf.feature_importance.map((entry: any, index: number) => (
+                                    {perf.best_model.feature_importance.map((entry: any, index: number) => (
                                         <Cell key={`cell-${index}`} fill={getFeatureColor(entry.feature)} />
                                     ))}
                                 </Bar>
@@ -138,21 +138,23 @@ const ModelPerformance = () => {
                             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100/50">
                                 <div className="flex justify-between text-[10px] font-black text-slate-400 mb-4 uppercase tracking-widest">
                                     <span>Architecture</span>
-                                    <span>AUC-ROC</span>
+                                    <span>PR-AUC</span>
                                 </div>
-                                <div className="flex justify-between items-center py-3 border-b border-slate-200/50">
-                                    <span className="text-slate-900 font-bold text-sm">Gradient Boosting</span>
-                                    <span className="text-emerald-600 font-black">{(metrics.auc_roc * 100).toFixed(1)}%</span>
-                                </div>
-                                <div className="flex justify-between items-center py-3">
-                                    <span className="text-slate-500 font-medium text-xs">Logistic Regression</span>
-                                    <span className="text-slate-400 font-bold text-xs">{(metrics.baseline_auc ? metrics.baseline_auc * 100 : 72.1).toFixed(1)}%</span>
-                                </div>
+                                {perf.comparison.map((m: any) => (
+                                    <div key={m.model_name} className="flex justify-between items-center py-3 border-b border-slate-200/50 last:border-0 hover:bg-slate-100/50 px-2 rounded-lg transition-colors">
+                                        <span className={`text-sm font-bold ${m.model_name === perf.best_model.model_name ? 'text-sky-600' : 'text-slate-500'}`}>
+                                            {m.model_name}
+                                        </span>
+                                        <span className={`text-xs font-black ${m.model_name === perf.best_model.model_name ? 'text-emerald-600 font-extrabold' : 'text-slate-400'}`}>
+                                            {((m.metrics.pr_auc || 0) * 100).toFixed(1)}%
+                                        </span>
+                                    </div>
+                                ))}
                             </div>
                             <div className="flex gap-3 p-4 rounded-2xl bg-sky-50 text-sky-700">
                                 <TrendingUp className="h-5 w-5 shrink-0" />
                                 <p className="text-xs font-bold leading-relaxed italic">
-                                    Gradient Boosting shows significant uplift in PR-AUC by capturing non-linear sensor degradation interactions.
+                                    Top models are evaluated against PR-AUC to account for label imbalance in aircraft component failure datasets.
                                 </p>
                             </div>
                         </div>

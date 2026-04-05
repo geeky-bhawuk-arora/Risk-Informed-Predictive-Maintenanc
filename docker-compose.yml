@@ -20,6 +20,20 @@ services:
     ports:
       - "5000:5000"
     command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /app/artifacts
+    volumes:
+      - mlflow_data:/app
+
+  ml-trainer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    command: python backend/ml/pipeline.py
+    depends_on:
+      db:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+    env_file: .env
 
   backend:
     build:
@@ -48,4 +62,6 @@ services:
 
 volumes:
   pgdata:
+    driver: local
+  mlflow_data:
     driver: local

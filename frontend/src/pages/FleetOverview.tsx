@@ -112,7 +112,7 @@ const FleetOverview = () => {
         <StatCard title="Health Score" value={`${data.fleet_health_score}%`} sub="+1.2% versus last week" icon={Activity} trend="up" color="sky" />
         <StatCard title="Active Fleet" value={`${data.total_aircraft}`} sub="Assets currently monitored" icon={Plane} color="slate" />
         <StatCard title="Critical Risks" value={`${data.high_risk_components}`} sub="Requires immediate review" icon={AlertCircle} color="rose" />
-        <StatCard title="Total Inventory" value="2,481" sub="Individual component IDs" icon={Compass} color="amber" />
+        <StatCard title="Total Inventory" value={data.total_components?.toLocaleString() || "0"} sub="Individual component IDs" icon={Compass} color="amber" />
       </div>
 
       {/* Charts Grid */}

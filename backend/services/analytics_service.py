@@ -27,6 +27,7 @@ def get_recommended_action(level: str) -> str:
 def get_fleet_overview(db: Session):
     latest_date = get_latest_snapshot_date(db)
     total_ac = db.query(models.Aircraft).count()
+    total_comp = db.query(models.Component).count()
     snaps = db.query(models.RiskSnapshot).filter(models.RiskSnapshot.snapshot_date == latest_date).all()
 
     high = len([s for s in snaps if s.risk_level == "HIGH"])
@@ -50,6 +51,7 @@ def get_fleet_overview(db: Session):
 
     return {
         "total_aircraft": total_ac,
+        "total_components": total_comp,
         "high_risk_components": high,
         "medium_risk_components": medium,
         "low_risk_components": low,

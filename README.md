@@ -13,17 +13,24 @@
 
 ---
 
+## 📚 Technical Documentation
+
+For in-depth details on our engineering standards and modeling strategies, please refer to:
+*   [**Pipeline Architecture & ML Practices**](docs/PIPELINE_ARCHITECTURE.md): Detailed guide on synthetic data drift, feature engineering, and multi-model benchmarking.
+
+---
+
 ## 🏗️ System Architecture
 
-AeroGuard employs a modern 4-tier containerized architecture for maximum scalability and reliability:
+AeroGuard employs a modern 5-tier containerized architecture for maximum scalability and reliability:
 
-1.  **📊 Database Layer (PostgreSQL)**: The source of truth for aircraft telemetry, component health histories, and maintenance logs.
+1.  **📊 Database Layer (PostgreSQL)**: Source of truth for telemetry, health history, and logs.
 2.  **🧠 Risk Engine & ML (Python)**:
-    *   **Data Generation**: Simulates complex flight operations and sensor fluctuations.
-    *   **Feature Engineering**: Extracts high-fidelity health indicators from raw telemetry.
-    *   **ML Pipeline**: Predicts failure probabilities using an MLflow-tracked Logistic Regression model.
-3.  **🔌 Backend API (FastAPI)**: A high-performance gateway serving risk distributions, fleet analytics, and maintenance priority lists.
-4.  **🖥️ Frontend Dashboard (React + Vite)**: A premium, dark-mode specialized interface for real-time fleet monitoring and decision support.
+    *   **Data Generation**: Simulates complex operations and sensor fluctuations with stochastic drift.
+    *   **ML Pipeline**: Benchmarks Logistic Regression, Random Forest, and Gradient Boosting.
+3.  **📈 Experiment Tracking (MLflow)**: Central registry for model metrics, ROC/PR curves, and confusion matrices.
+4.  **🔌 Backend API (FastAPI)**: High-performance gateway for fleet analytics and the **Flight Assistant**.
+5.  **🖥️ Frontend Dashboard (React + Vite)**: Premium interface for real-time monitoring.
 
 ---
 

@@ -18,6 +18,19 @@ def run_feature_engineering():
     df_sensors = pd.read_sql("SELECT * FROM sensor_data WHERE timestamp >= NOW() - INTERVAL '60 days'", engine)
     df_flights = pd.read_sql("SELECT * FROM flight_operations WHERE departure_time >= NOW() - INTERVAL '30 days'", engine)
     
+    # --- DATA CLEANING (Hardening for "Messy" Data) ---
+    print(f"   - Cleaning raw telemetry ({len(df_sensors)} records)...")
+    
+    # 1. Deduplication
+    df_sensors = df_sensors.drop_duplicates(subset=['component_id', 'timestamp', 'sensor_type'])
+    
+    # 2. Outlier Clipping (1st to 99th percentile) - Prevents extreme spikes from ruining slopes
+    s_min, s_max = df_sensors['value'].quantile([0.01, 0.99])
+    df_sensors['value'] = df_sensors['value'].clip(lower=s_min, upper=s_max)
+    
+    # 3. Handle Zero/Invalid values (e.g. negative EGT values are physically impossible)
+    df_sensors.loc[df_sensors['value'] <= 0, 'value'] = np.nan
+    
     now = datetime.now()
     features_list = []
     
@@ -35,6 +48,11 @@ def run_feature_engineering():
         c_sensors = df_sensors[df_sensors['component_id'] == c_id].copy()
         ac_flights = df_flights[df_flights['aircraft_id'] == ac_id].copy()
         
+        # 4. Imputation: Fill small gaps with interpolation for more accurate trend analysis
+        if not c_sensors.empty:
+            c_sensors = c_sensors.sort_values('timestamp')
+            c_sensors['value'] = c_sensors['value'].interpolate(method='linear').fillna(method='bfill').fillna(method='ffill')
+
         # Base Features
         # 1. days_since_last_maintenance
         if not c_maint.empty:

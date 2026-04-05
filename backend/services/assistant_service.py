@@ -4,7 +4,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from backend.db import models
-from backend.services import analytics_service
+from backend.services import analytics_service, model_service
 
 
 def _latest_snapshot_date(db: Session):
@@ -156,6 +156,40 @@ def answer_question(db: Session, question: str):
             "data": {"tier_changes": changes},
             "suggestions": suggestions,
         }
+
+    if "climate" in lowered or "zone" in lowered or any(z in lowered for z in ["tropical", "arid", "temperate", "arctic", "humid"]):
+        rows = db.query(models.Aircraft.climate_zone, func.count(models.Aircraft.aircraft_id))\
+            .group_by(models.Aircraft.climate_zone).all()
+        answer = ", ".join([f"{r[0]} ({r[1]} aircraft)" for r in rows])
+        return {
+            "answer": f"The fleet is distributed across these climate zones: {answer}.",
+            "intent": "climate_distribution",
+            "data": {"distribution": [{"zone": r[0], "count": r[1]} for r in rows]},
+            "suggestions": suggestions,
+        }
+
+    if "checked" in lowered or "progress" in lowered or "maintenance status" in lowered:
+        latest_date = _latest_snapshot_date(db)
+        total = db.query(models.RiskSnapshot).filter(models.RiskSnapshot.snapshot_date == latest_date).count()
+        checked = db.query(models.RiskSnapshot).filter(models.RiskSnapshot.snapshot_date == latest_date, models.RiskSnapshot.is_checked == True).count()
+        perc = (checked / total * 100) if total > 0 else 0
+        return {
+            "answer": f"Maintenance progress for the current cycle is {perc:.1f}% ({checked} of {total} components inspected).",
+            "intent": "maintenance_progress",
+            "data": {"progress": perc, "checked": checked, "total": total},
+            "suggestions": suggestions,
+        }
+
+    if "which model" in lowered or "best model" in lowered or "performance" in lowered:
+        perf = model_service.get_model_performance()
+        best = perf.get("best_model")
+        if best:
+            return {
+                "answer": f"The current top-performing model is {best['model_name']} with a PR-AUC of {best['metrics'].get('pr_auc', 0):.3f}.",
+                "intent": "model_performance",
+                "data": {"best_model": best},
+                "suggestions": suggestions,
+            }
 
     return {
         "answer": (
