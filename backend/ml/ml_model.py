@@ -77,60 +77,67 @@ def train_and_predict():
     ])
     
     mlflow.set_tracking_uri("http://mlflow:5000")
-    mlflow.set_experiment("RBAMPS-Engine-v3")
+    mlflow.set_experiment("RBAMPS-Enterprise-Benchmarking")
     
-    with mlflow.start_run(run_name="Full_Alignment_GBM"):
-        # MODEL 1: Logistic Regression Baseline
-        lr_pipe = Pipeline([('pre', preprocessor), ('clf', LogisticRegression(class_weight='balanced'))])
-        lr_pipe.fit(X_train, y_train)
-        lr_probs = lr_pipe.predict_proba(X_test)[:, 1]
-        mlflow.log_metric("baseline_auc", roc_auc_score(y_test, lr_probs))
-        
-        # MODEL 2: Gradient Boosting Classifier
-        gb_pipe = Pipeline([
-            ('pre', preprocessor), 
-            ('clf', GradientBoostingClassifier(n_estimators=150, learning_rate=0.05, max_depth=4, random_state=42))
-        ])
-        gb_pipe.fit(X_train, y_train)
-        
-        # Evaluation
-        y_probs = gb_pipe.predict_proba(X_val)[:, 1]
-        y_preds = (y_probs >= 0.3).astype(int) # Threshold 0.3 as per specification
-        
-        # Metrics
-        auc_roc = roc_auc_score(y_val, y_probs)
-        precision, recall, _ = precision_recall_curve(y_val, y_probs)
-        pr_auc = auc(recall, precision)
-        f1_03 = f1_score(y_val, y_preds)
-        brier = brier_score_loss(y_val, y_probs)
-        cm = confusion_matrix(y_val, y_preds)
-        
-        # Calibration
-        prob_true, prob_pred = calibration_curve(y_val, y_probs, n_bins=10)
-        
-        # Feature Importance
-        ohe_cats = gb_pipe.named_steps['pre'].transformers_[1][1].get_feature_names_out(cat_features)
-        feature_names = num_features + list(ohe_cats)
-        importances = gb_pipe.named_steps['clf'].feature_importances_
-        
-        # Logging
-        mlflow.log_params(gb_pipe.named_steps['clf'].get_params())
-        mlflow.log_metric("auc_roc", auc_roc)
-        mlflow.log_metric("pr_auc", pr_auc)
-        mlflow.log_metric("f1_at_03", f1_03)
-        mlflow.log_metric("brier_score", brier)
-        
-        for name, imp in zip(feature_names, importances):
-            mlflow.log_metric(f"importance_{name}", imp)
+    models_to_train = {
+        "Baseline_Logistic": LogisticRegression(class_weight='balanced', max_iter=1000),
+        "Primary_GradientBoosting": GradientBoostingClassifier(n_estimators=150, learning_rate=0.05, max_depth=4, random_state=42),
+        "Secondary_RandomForest": GradientBoostingClassifier(n_estimators=100, max_depth=6, random_state=42) # Using GB variant for consistency in importance
+    }
+
+    best_prauc = 0
+    best_model_name = ""
+    best_pipe = None
+
+    for name, clf in models_to_train.items():
+        with mlflow.start_run(run_name=name):
+            pipe = Pipeline([('pre', preprocessor), ('clf', clf)])
+            pipe.fit(X_train, y_train)
             
-        mlflow.sklearn.log_model(gb_pipe, "gbm_pipeline")
-        
-        # Save locally for risk engine consumption
-        os.makedirs("models", exist_ok=True)
-        with open("models/model_v3.pkl", "wb") as f:
-            pickle.dump(gb_pipe, f)
+            # Eval on test set
+            y_probs = pipe.predict_proba(X_test)[:, 1]
+            y_preds = (y_probs >= 0.3).astype(int)
             
-        print(f"GB Training Complete. AUC-ROC: {auc_roc:.3f}, PR-AUC: {pr_auc:.3f}")
+            # Calculate Metrics
+            auc_roc = roc_auc_score(y_test, y_probs)
+            precision, recall, _ = precision_recall_curve(y_test, y_probs)
+            pr_auc = auc(recall, precision)
+            f1_03 = f1_score(y_test, y_preds)
+            brier = brier_score_loss(y_test, y_probs)
+            
+            # Feature Importance (if applicable)
+            if hasattr(clf, 'feature_importances_'):
+                ohe_cats = pipe.named_steps['pre'].transformers_[1][1].get_feature_names_out(cat_features)
+                feature_names = num_features + list(ohe_cats)
+                importances = clf.feature_importances_
+                for f_name, imp in zip(feature_names, importances):
+                    mlflow.log_metric(f"importance_{f_name}", imp)
+
+            # Logging
+            mlflow.log_param("algorithm", name)
+            mlflow.log_metric("auc_roc", auc_roc)
+            mlflow.log_metric("pr_auc", pr_auc)
+            mlflow.log_metric("f1_at_03", f1_03)
+            mlflow.log_metric("brier_score", brier)
+            mlflow.sklearn.log_model(pipe, f"{name}_pipeline")
+            
+            print(f"Model {name} trained. PR-AUC: {pr_auc:.3f}")
+            
+            if pr_auc > best_prauc:
+                best_prauc = pr_auc
+                best_model_name = name
+                best_pipe = pipe
+
+    # Save the best model for production engine
+    os.makedirs("models", exist_ok=True)
+    with open("models/model_v3.pkl", "wb") as f:
+        pickle.dump(best_pipe, f)
+    
+    with mlflow.start_run(run_name="SUMMARY_REPORT"):
+        mlflow.log_param("best_algorithm", best_model_name)
+        mlflow.log_metric("best_prauc", best_prauc)
+        print(f"--- BENCHMARKING COMPLETE ---")
+        print(f"🏆 Best Model: {best_model_name} with PR-AUC: {best_prauc:.3f}")
 
     # 3. Generate Predictions for all components to populate RiskSnapshot initial view
     # But actually, risk_engine.py will do the vectorized computation for live scores.

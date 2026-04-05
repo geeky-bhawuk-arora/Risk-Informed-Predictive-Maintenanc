@@ -84,58 +84,70 @@ const SettingsPanel = () => {
 
     return (
         <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-                        <Settings className="w-8 h-8 text-blue-500" />
+                    <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                        <div className="p-2 bg-blue-50 rounded-xl shadow-sm">
+                            <Settings className="w-8 h-8 text-blue-600" />
+                        </div>
                         Risk Parameters
                     </h1>
-                    <p className="text-slate-400 mt-1">Configure the relative weights of the maintenance impact engine.</p>
+                    <p className="text-slate-500 mt-2 font-medium">Configure the relative weights of the maintenance impact engine.</p>
                 </div>
             </div>
 
-            <div className="bg-slate-900/50 border border-white/10 rounded-3xl p-8 backdrop-blur-xl space-y-12">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center text-sm font-bold text-slate-500 uppercase tracking-widest">
-                    <div className="space-y-4">
-                        <div className="bg-rose-500/10 p-4 rounded-2xl border border-rose-500/10">
-                            <Shield className="w-8 h-8 text-rose-500 mx-auto mb-2" />
-                            <span className="text-rose-500">Flight Safety</span>
-                            <div className="text-2xl text-white mt-2">{(weights.safety * 100).toFixed(0)}%</div>
+            <div className="bg-white border border-slate-200 rounded-[2.5rem] p-12 shadow-sm space-y-16 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
+                    <Shield className="w-64 h-64 text-slate-900" />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+                    <div className="space-y-6 group">
+                        <div className="bg-rose-50/50 p-8 rounded-[2rem] border border-rose-100 hover:border-rose-200 transition-all text-center">
+                            <Shield className="w-10 h-10 text-rose-500 mx-auto mb-4" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-600">Flight Safety</span>
+                            <div className="text-4xl font-black text-slate-900 mt-2">{(weights.safety * 100).toFixed(0)}<span className="text-sm text-slate-400 ml-1">%</span></div>
                         </div>
-                        <input 
-                            type="range" min="0" max="1" step="0.01" 
-                            value={weights.safety} 
-                            onChange={(e) => handleWeightChange('safety', parseFloat(e.target.value))}
-                            className="w-full h-2 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-rose-500" 
-                        />
+                        <div className="px-2">
+                            <input 
+                                type="range" min="0" max="1" step="0.01" 
+                                value={weights.safety} 
+                                onChange={(e) => handleWeightChange('safety', parseFloat(e.target.value))}
+                                className="w-full h-1.5 bg-slate-100 rounded-full appearance-none cursor-pointer accent-rose-500 hover:accent-rose-600 transition-all" 
+                            />
+                        </div>
                     </div>
                     
-                    <div className="space-y-4">
-                        <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/10">
-                            <Truck className="w-8 h-8 text-amber-500 mx-auto mb-2" />
-                            <span className="text-amber-500">Operational</span>
-                            <div className="text-2xl text-white mt-2">{(weights.operational * 100).toFixed(0)}%</div>
+                    <div className="space-y-6 group">
+                        <div className="bg-amber-50/50 p-8 rounded-[2rem] border border-amber-100 hover:border-amber-200 transition-all text-center">
+                            <Truck className="w-10 h-10 text-amber-500 mx-auto mb-4" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">Operational</span>
+                            <div className="text-4xl font-black text-slate-900 mt-2">{(weights.operational * 100).toFixed(0)}<span className="text-sm text-slate-400 ml-1">%</span></div>
                         </div>
-                        <input 
-                            type="range" min="0" max="1" step="0.01" 
-                            value={weights.operational} 
-                            onChange={(e) => handleWeightChange('operational', parseFloat(e.target.value))}
-                            className="w-full h-2 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-amber-500" 
-                        />
+                        <div className="px-2">
+                            <input 
+                                type="range" min="0" max="1" step="0.01" 
+                                value={weights.operational} 
+                                onChange={(e) => handleWeightChange('operational', parseFloat(e.target.value))}
+                                className="w-full h-1.5 bg-slate-100 rounded-full appearance-none cursor-pointer accent-amber-500 hover:accent-amber-600 transition-all" 
+                            />
+                        </div>
                     </div>
 
-                    <div className="space-y-4">
-                        <div className="bg-blue-500/10 p-4 rounded-2xl border border-blue-500/10">
-                            <DollarSign className="w-8 h-8 text-blue-500 mx-auto mb-2" />
-                            <span className="text-blue-500">Repair Cost</span>
-                            <div className="text-2xl text-white mt-2">{(weights.cost * 100).toFixed(0)}%</div>
+                    <div className="space-y-6 group">
+                        <div className="bg-blue-50/50 p-8 rounded-[2rem] border border-blue-100 hover:border-blue-200 transition-all text-center">
+                            <DollarSign className="w-10 h-10 text-blue-500 mx-auto mb-4" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Repair Cost</span>
+                            <div className="text-4xl font-black text-slate-900 mt-2">{(weights.cost * 100).toFixed(0)}<span className="text-sm text-slate-400 ml-1">%</span></div>
                         </div>
-                        <input 
-                            type="range" min="0" max="1" step="0.01" 
-                            value={weights.cost} 
-                            onChange={(e) => handleWeightChange('cost', parseFloat(e.target.value))}
-                            className="w-full h-2 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-blue-500" 
-                        />
+                        <div className="px-2">
+                            <input 
+                                type="range" min="0" max="1" step="0.01" 
+                                value={weights.cost} 
+                                onChange={(e) => handleWeightChange('cost', parseFloat(e.target.value))}
+                                className="w-full h-1.5 bg-slate-100 rounded-full appearance-none cursor-pointer accent-blue-500 hover:accent-blue-600 transition-all" 
+                            />
+                        </div>
                     </div>
                 </div>
 

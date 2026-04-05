@@ -56,9 +56,29 @@ def bootstrap_data_if_needed(engine):
     run_command([sys.executable, "backend/ml/pipeline.py"])
 
 
+def ensure_schema_migrations(engine):
+    print("Checking for schema migrations...")
+    try:
+        with engine.connect() as connection:
+            # Check if risk_drivers column exists in risk_snapshot
+            col_exists_q = text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.columns 
+                    WHERE table_name = 'risk_snapshot' AND column_name = 'risk_drivers'
+                )
+            """)
+            col_exists = connection.execute(col_exists_q).scalar()
+            if not col_exists:
+                print("Migration: Adding missing 'risk_drivers' column to 'risk_snapshot' table.")
+                connection.execute(text("ALTER TABLE risk_snapshot ADD COLUMN risk_drivers TEXT"))
+                connection.commit()
+    except Exception as e:
+        print(f"Migration check failed: {e}")
+
 def main():
     engine = wait_for_database()
     models.Base.metadata.create_all(bind=db_engine)
+    ensure_schema_migrations(engine)
     bootstrap_data_if_needed(engine)
 
 
