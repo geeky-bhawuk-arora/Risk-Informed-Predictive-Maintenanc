@@ -141,7 +141,10 @@ const PriorityBoard = () => {
                 <tr key={component.id} className="group hover:bg-slate-50/80 transition-colors">
                   <td className="px-8 py-5">
                     <div className="font-extrabold text-slate-900 group-hover:text-sky-600 transition-colors">{component.name}</div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mt-0.5">Asset ID {component.aircraft_id}</div>
+                    <div className="flex flex-col gap-0.5 mt-1">
+                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-tight">P/N: {component.part_number || 'N/A'}</div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight italic">Asset ID {component.aircraft_id}</div>
+                    </div>
                   </td>
                   <td className="px-8 py-5">
                     <div className="text-sm font-bold text-slate-700">{component.system}</div>

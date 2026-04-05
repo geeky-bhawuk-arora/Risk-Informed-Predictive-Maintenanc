@@ -62,7 +62,8 @@ def ensure_schema_migrations(engine):
     needed_columns = {
         "risk_drivers": "TEXT",
         "comments": "TEXT",
-        "is_checked": "BOOLEAN DEFAULT FALSE"
+        "is_checked": "BOOLEAN DEFAULT FALSE",
+        "part_number": "VARCHAR(100)" # New migration for part traceability
     }
     
     try:

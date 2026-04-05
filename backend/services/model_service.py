@@ -12,12 +12,22 @@ def get_model_performance():
         if runs.empty:
             raise Exception("No runs found")
         
+        # Practice: Sanitize NaN/Inf for JSON compliance
+        def sanitize_metric(val):
+            import math
+            import numpy as np
+            if isinstance(val, (float, np.float64, np.float32)):
+                if math.isnan(val) or math.isinf(val):
+                    return 0.0
+            return val
+
         comparison = []
         for _, run in runs.iterrows():
             if run["tags.mlflow.runName"] == "SUMMARY_REPORT": continue
             
-            metrics = {k.replace("metrics.", ""): v for k, v in run.items() if k.startswith("metrics.") and not k.startswith("metrics.importance_")}
-            features = [{"feature": k.replace("metrics.importance_", ""), "importance": v}
+            metrics = {k.replace("metrics.", ""): sanitize_metric(v) 
+                      for k, v in run.items() if k.startswith("metrics.") and not k.startswith("metrics.importance_")}
+            features = [{"feature": k.replace("metrics.importance_", ""), "importance": sanitize_metric(v)}
                         for k, v in run.items() if k.startswith("metrics.importance_")]
             
             comparison.append({

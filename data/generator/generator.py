@@ -19,9 +19,8 @@ engine = create_engine(DB_URL)
 # --- MASTER CONFIGURATION ---
 SCALE_TARGETS = {
     "small": {
-        "num_aircraft": 50,
         "history_years": 1,
-        "sensor_points_per_day": 0.5,
+        "sensor_points_per_day": 3.0, # Increased density for smoother UI charts
         "mtbf_mult": 0.2, # Force failures at small scale
         "label": "Small (10%)"
     },
@@ -145,6 +144,7 @@ def generate_components(aircraft_list, config):
                     "system_category": cat_name,
                     "component_type": f"{cat_name} Unit {i+1}",
                     "name": f"{cat_name} {fake.lexify('????').upper()}",
+                    "part_number": f"P/N-{random.randint(10000, 99999)}-{fake.lexify('??').upper()}",
                     "manufacturer": random.choice(mfrs),
                     "installation_date": inst_date,
                     "age_hours": random.uniform(0, 5000),

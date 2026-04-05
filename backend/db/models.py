@@ -27,6 +27,7 @@ class Component(Base):
     system_category = Column(String(100)) # propulsion, flight_controls, etc.
     component_type = Column(String(100)) # e.g. Turbofan, Main Gear
     name = Column(String(255))
+    part_number = Column(String(100), nullable=True, index=True)
     manufacturer = Column(String(100))
     installation_date = Column(Date)
     age_hours = Column(Float, default=0.0)

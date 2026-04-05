@@ -132,6 +132,7 @@ const ComponentDetail = () => {
                 <div>
                   <div className="text-4xl font-black text-sky-600">{risk.risk_score.toFixed(2)}</div>
                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aggregate Risk Score</div>
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-tight mt-1">P/N: {risk.part_number || 'N/A'}</div>
                 </div>
                 <div className="h-12 w-px bg-slate-100 hidden md:block"></div>
                 <div>
@@ -143,6 +144,24 @@ const ComponentDetail = () => {
                 <Zap className="h-8 w-8" />
               </div>
             </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+            <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+              <Activity className="h-6 w-6 text-sky-600" />
+              Risk Drivers & Explainability
+            </h3>
+            <div className="flex flex-wrap gap-3">
+              {(risk.risk_drivers || 'Fleet Baseline').split(', ').map((driver: string) => (
+                <div key={driver} className="flex items-center gap-2 rounded-2xl bg-sky-50 px-5 py-2.5 ring-1 ring-sky-100 border border-sky-100">
+                  <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse"></span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-sky-800">{driver}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-6 text-xs font-medium text-slate-500 leading-relaxed border-l-4 border-slate-100 pl-4 italic">
+              Deep analysis of telemetry signals and historical maintenance patterns has flagged these specific markers as primary drivers for the current risk tier.
+            </p>
+          </div>
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">

@@ -155,6 +155,7 @@ def get_risk_rankings(db: Session, page: int, limit: int, level: Optional[str], 
         "components": [{
             "id": row.Component.component_id,
             "name": row.Component.name,
+            "part_number": row.Component.part_number,
             "system": row.Component.system_category,
             "aircraft_id": row.Component.aircraft_id,
             "risk_score": round(row.RiskSnapshot.risk_score, 3),
@@ -176,6 +177,7 @@ def get_component_risk(db: Session, component_id: int):
     return {
         "component_id": comp.component_id,
         "component_name": comp.name,
+        "part_number": comp.part_number,
         "system_category": comp.system_category,
         "aircraft_id": comp.aircraft_id,
         "snapshot_date": latest.snapshot_date,
