@@ -286,14 +286,16 @@ def get_aircraft_components(db: Session, aircraft_id: int):
         .filter(models.RiskSnapshot.snapshot_date == latest_snapshot_date)\
         .order_by(desc(models.RiskSnapshot.risk_score)).all()
 
-    return [{
-        "component_id": component.component_id,
-        "name": component.name,
-        "system_category": component.system_category,
-        "risk_score": snapshot.risk_score,
-        "risk_level": snapshot.risk_level,
-        "failure_probability": snapshot.failure_probability,
-    } for component, snapshot in rows]
+    return {
+        "components": [{
+            "component_id": component.component_id,
+            "name": component.name,
+            "system_category": component.system_category,
+            "risk_score": snapshot.risk_score,
+            "risk_level": snapshot.risk_level,
+            "failure_probability": snapshot.failure_probability,
+        } for component, snapshot in rows]
+    }
 
 
 def export_rankings_csv(db: Session):
