@@ -59,27 +59,28 @@ def bootstrap_data_if_needed(engine):
 
 def ensure_schema_migrations(engine):
     print("Checking for schema migrations...")
-    needed_columns = {
-        "risk_drivers": "TEXT",
-        "comments": "TEXT",
-        "is_checked": "BOOLEAN DEFAULT FALSE",
-        "part_number": "VARCHAR(100)" # New migration for part traceability
-    }
+    # (Table, Column, Type)
+    migrations = [
+        ("risk_snapshot", "risk_drivers", "TEXT"),
+        ("risk_snapshot", "comments", "TEXT"),
+        ("risk_snapshot", "is_checked", "BOOLEAN DEFAULT FALSE"),
+        ("component", "part_number", "VARCHAR(100)")
+    ]
     
     try:
         with engine.connect() as connection:
-            for col_name, col_type in needed_columns.items():
+            for table_name, col_name, col_type in migrations:
                 col_exists_q = text(f"""
                     SELECT EXISTS (
                         SELECT FROM information_schema.columns 
-                        WHERE table_name = 'risk_snapshot' AND column_name = :col
+                        WHERE table_name = :table AND column_name = :col
                     )
                 """)
-                col_exists = connection.execute(col_exists_q, {"col": col_name}).scalar()
+                col_exists = connection.execute(col_exists_q, {"table": table_name, "col": col_name}).scalar()
                 
                 if not col_exists:
-                    print(f"Migration: Adding missing '{col_name}' column to 'risk_snapshot' table.")
-                    connection.execute(text(f"ALTER TABLE risk_snapshot ADD COLUMN {col_name} {col_type}"))
+                    print(f"Migration: Adding missing '{col_name}' column to '{table_name}' table.")
+                    connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}"))
                     connection.commit()
     except Exception as e:
         print(f"Migration check failed: {e}")
