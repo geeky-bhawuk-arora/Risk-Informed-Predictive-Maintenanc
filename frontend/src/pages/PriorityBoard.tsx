@@ -114,6 +114,7 @@ const PriorityBoard = () => {
                 <th className="px-8 py-5">Component & Airframe</th>
                 <th className="px-8 py-5">System Category</th>
                 <th className="px-8 py-5">Risk Score</th>
+                <th className="px-8 py-5">Risk Drivers</th>
                 <th className="px-8 py-5">Priority Status</th>
                 <th className="px-8 py-5">Prescriptive Action</th>
                 <th className="px-8 py-5 text-right">Action</th>
@@ -147,6 +148,11 @@ const PriorityBoard = () => {
                   </td>
                   <td className="px-8 py-5">
                     <div className="font-mono text-sm font-black text-slate-900">{(component.risk_score * 100).toFixed(2)}%</div>
+                  </td>
+                  <td className="px-8 py-5">
+                    <div className="text-[10px] font-black text-sky-700 bg-sky-50 px-2.5 py-1 rounded-full border border-sky-100 uppercase tracking-widest truncate max-w-[180px]">
+                      {component.risk_drivers || 'Fleet Baseline'}
+                    </div>
                   </td>
                   <td className="px-8 py-5">
                     <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-wider ring-1 ${getBadgeStyles(component.level)}`}>

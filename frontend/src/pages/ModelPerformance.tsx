@@ -46,11 +46,12 @@ const ModelPerformance = () => {
     const metrics = perf.metrics;
     
     const getFeatureColor = (name: string) => {
-        if (name.includes('sensor')) return '#0ea5e9';
-        if (name.includes('maintenance') || name.includes('maint')) return '#8b5cf6';
-        if (name.includes('aircraft')) return '#10b981';
-        if (name.includes('utilization')) return '#f59e0b';
-        return '#94a3b8';
+        const n = name.toLowerCase();
+        if (n.includes('sensor') || n.includes('slope') || n.includes('trend')) return '#0ea5e9'; // Sky
+        if (n.includes('maintenance') || n.includes('maint') || n.includes('failure')) return '#8b5cf6'; // Purple
+        if (n.includes('age') || n.includes('mtbf')) return '#10b981'; // Emerald
+        if (n.includes('utilization') || n.includes('intensity')) return '#f59e0b'; // Amber
+        return '#94a3b8'; // Slate
     };
 
     return (

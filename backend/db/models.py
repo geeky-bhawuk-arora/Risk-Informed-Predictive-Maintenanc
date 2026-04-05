@@ -99,6 +99,7 @@ class RiskSnapshot(Base):
     failure_label = Column(Integer) # 0 or 1
     comments = Column(Text, nullable=True)
     is_checked = Column(Boolean, default=False)
+    risk_drivers = Column(Text, nullable=True) # JSON or comma-sep list of main contributors
 
     component = relationship("Component", back_populates="risk_snapshots")
 

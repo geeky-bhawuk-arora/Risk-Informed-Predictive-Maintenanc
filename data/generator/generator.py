@@ -206,12 +206,11 @@ def generate_flight_ops(aircraft_list, config):
         pd.DataFrame(batch).to_sql('flight_operations', engine, if_exists='append', index=False)
     return f_id - 1
 
-def generate_sensor_data(config):
+def generate_sensor_data(config, failing_components):
     print("--- Generating Sensor Data (Weibull degradation + Climatic Drift) ---")
     now = datetime.now()
     history_days = config["history_years"] * 365
     
-    # Load metadata for profiles
     df_comp = pd.read_sql("""
         SELECT c.component_id, c.system_category, a.climate_zone, c.weibull_shape, c.weibull_scale 
         FROM component c 
@@ -222,50 +221,47 @@ def generate_sensor_data(config):
     r_id = 1
     
     for _, comp in df_comp.iterrows():
+        c_id = comp["component_id"]
         chans = SYSTEM_CATEGORIES[comp["system_category"]]["chans"]
         degrad_mult = CLIMATE_ZONES[comp["climate_zone"]]["degrad_mult"]
         
-        # 10% components fail
-        is_failing = random.random() < 0.10
-        failure_time = random.uniform(0.7, 0.95) * history_days if is_failing else 10.0 * history_days
+        # Check if this component has a known failure (past or future)
+        # For simplicity, we only trigger degradation for the failure within the next 30 days
+        has_future_failure = c_id in failing_components
+        failure_date = failing_components.get(c_id) if has_future_failure else None
         
         for chan in chans:
             base_val = random.uniform(50, 100)
             noise_lv = random.uniform(0.5, 2.0)
             
             curr = now - timedelta(days=history_days)
-            day_idx = 0
             while curr < now:
                 # Sensor gap check (2-5%)
-                if random.random() < 0.03: # is_missing
-                    batch.append({"reading_id": r_id, "component_id": comp["component_id"], "sensor_type": chan, "timestamp": curr, "value": None, "is_missing": True})
+                if random.random() < 0.03: 
+                    batch.append({"reading_id": r_id, "component_id": c_id, "sensor_type": chan, "timestamp": curr, "value": None, "is_missing": True})
                 else:
-                    # Degradation logic
-                    progression = day_idx / history_days
-                    degradation = (day_idx / comp["weibull_scale"])**comp["weibull_shape"] if is_failing and day_idx > failure_time*0.5 else 0
+                    # Degradation logic: Intensive degradation in the 14 days before failure
+                    degradation = 0
+                    if has_future_failure:
+                        days_until_fail = (failure_date - curr).days
+                        if 0 <= days_until_fail <= 14:
+                            # Exponential-like degradation as failure approaches
+                            # Starts at 0, goes to ~100+ units of increase
+                            degradation = (15 - days_until_fail)**2.5 / 15.0
                     
-                    # Seasonal influence for Temps
                     seasonal = 4.0 * np.sin(2 * np.pi * curr.timetuple().tm_yday / 365) if "Temp" in chan or "EGT" in chan else 0
-                    
-                    # Anomaly spike (0.5% chance)
                     is_ano = random.random() < 0.005
                     spike = random.uniform(10, 30) if is_ano else 0
                     
-                    val = base_val + (degradation * 100 * degrad_mult) + seasonal + spike + np.random.normal(0, noise_lv)
+                    val = base_val + (degradation * 15 * degrad_mult) + seasonal + spike + np.random.normal(0, noise_lv)
                     
                     batch.append({
-                        "reading_id": r_id,
-                        "component_id": comp["component_id"],
-                        "sensor_type": chan,
-                        "timestamp": curr,
-                        "value": round(float(val), 2),
-                        "is_anomaly": is_ano,
-                        "is_missing": False
+                        "reading_id": r_id, "component_id": c_id, "sensor_type": chan, "timestamp": curr,
+                        "value": round(float(val), 2), "is_anomaly": is_ano, "is_missing": False
                     })
                 
                 r_id += 1
                 curr += timedelta(hours=random.randint(24, 72) / config["sensor_points_per_day"])
-                day_idx += 1
                 
                 if len(batch) >= 10000:
                     pd.DataFrame(batch).to_sql('sensor_data', engine, if_exists='append', index=False)
@@ -275,24 +271,27 @@ def generate_sensor_data(config):
         pd.DataFrame(batch).to_sql('sensor_data', engine, if_exists='append', index=False)
     return r_id - 1
 
-def generate_maintenance_logs(aircraft_list, config):
+def generate_maintenance_logs(aircraft_list, config, failing_components):
     print("--- Generating Maintenance Logs (Scheduled/Unscheduled) ---")
     df_comp = pd.read_sql("SELECT component_id, installation_date, mtbf FROM component", engine)
     
     batch = []
     l_id = 1
+    now = datetime.now()
     
     for _, comp in df_comp.iterrows():
         inst_date = datetime.combine(comp["installation_date"], datetime.min.time())
         curr = inst_date
-        while curr < datetime.now():
+        c_id = comp["component_id"]
+        
+        while curr < now:
             # A-Check every ~500 hrs, roughly ~3 months
             curr += timedelta(days=random.randint(70, 110))
-            if curr > datetime.now(): break
+            if curr > now: break
             
             # Scheduled event
             batch.append({
-                "log_id": l_id, "component_id": comp["component_id"], "maintenance_date": curr,
+                "log_id": l_id, "component_id": c_id, "maintenance_date": curr,
                 "maintenance_type": "scheduled", "subtype": "A-check",
                 "description": "Routine phase check", "outcome": "Resolvied",
                 "duration_hours": random.uniform(6, 12), "parts_cost": random.uniform(200, 800),
@@ -303,7 +302,7 @@ def generate_maintenance_logs(aircraft_list, config):
             # 15% chance of an unscheduled event following a scheduled one (findings)
             if random.random() < 0.15:
                 batch.append({
-                    "log_id": l_id, "component_id": comp["component_id"], "maintenance_date": curr + timedelta(hours=4),
+                    "log_id": l_id, "component_id": c_id, "maintenance_date": curr + timedelta(hours=4),
                     "maintenance_type": "on-condition", "subtype": "Finding",
                     "description": "Wear detected during inspection", "outcome": "Part-replaced",
                     "duration_hours": random.uniform(2, 6), "parts_cost": random.uniform(1000, 4000),
@@ -311,32 +310,20 @@ def generate_maintenance_logs(aircraft_list, config):
                 })
                 l_id += 1
 
-            if len(batch) >= 5000:
-                pd.DataFrame(batch).to_sql('maintenance_log', engine, if_exists='append', index=False)
-                batch = []
-
-    if batch:
-        pd.DataFrame(batch).to_sql('maintenance_log', engine, if_exists='append', index=False)
-    
-    # --- Inject FUTURE failures for training labels at small scale ---
-    # This prevents the single-class solver error
-    future_batch = []
-    now = datetime.now()
-    lookahead = now + timedelta(days=30)
-    for _, comp in df_comp.iterrows():
-        if random.random() < 0.15: # 15% failure rate in window
-            fail_date = now + timedelta(days=random.randint(1, 29))
-            future_batch.append({
-                "log_id": l_id, "component_id": comp["component_id"], "maintenance_date": fail_date,
+        # Synchronize future failures
+        if c_id in failing_components:
+            fail_date = failing_components[c_id]
+            batch.append({
+                "log_id": l_id, "component_id": c_id, "maintenance_date": fail_date,
                 "maintenance_type": "unscheduled", "subtype": "Failure",
-                "description": "Predicted failure occurred", "outcome": "Repair-deferred",
+                "description": "Predicted component failure", "outcome": "Repair-deferred",
                 "duration_hours": random.uniform(10, 30), "parts_cost": random.uniform(5000, 15000),
                 "was_predictable": True
             })
             l_id += 1
-    
-    if future_batch:
-        pd.DataFrame(future_batch).to_sql('maintenance_log', engine, if_exists='append', index=False)
+
+    if batch:
+        pd.DataFrame(batch).to_sql('maintenance_log', engine, if_exists='append', index=False)
 
     return l_id - 1
 
@@ -378,8 +365,18 @@ def main():
     aircraft = generate_aircraft(config)
     num_comps = generate_components(aircraft, config)
     num_flights = generate_flight_ops(aircraft, config)
-    num_sensors = generate_sensor_data(config)
-    num_logs = generate_maintenance_logs(aircraft, config)
+    
+    # Define which components fail in the next 30 days upfront for telemetry/log sync
+    # 15% failure rate to ensure enough positive samples for ML
+    df_comp_ids = pd.read_sql("SELECT component_id FROM component", engine)
+    now = datetime.now()
+    failing_components = {
+        row['component_id']: now + timedelta(days=random.randint(2, 28))
+        for _, row in df_comp_ids.iterrows() if random.random() < 0.15
+    }
+
+    num_sensors = generate_sensor_data(config, failing_components)
+    num_logs = generate_maintenance_logs(aircraft, config, failing_components)
 
     validate_and_report()
     print(f"Generation complete in {(time.time() - start)/60:.1f} minutes.")

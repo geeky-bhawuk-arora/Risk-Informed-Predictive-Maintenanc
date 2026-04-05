@@ -140,7 +140,34 @@ def calculate_risk(weights=None):
     else:
         df_merged['tier_changed_to_high'] = 0
 
-    # 5. Store Snapshot
+    # 5. Calculate Risk Drivers (Local explainability)
+    # Compare each component to the fleet mean for major features
+    risk_drivers_list = []
+    
+    # Select features to monitor for drivers
+    driver_features = [
+        'sensor_trend_slope', 'anomaly_count_30d', 'mtbf_ratio', 
+        'historical_failure_count', 'days_since_last_maintenance', 
+        'component_age_hours', 'utilization_intensity'
+    ]
+    
+    fleet_stats = df_features[driver_features].agg(['mean', 'std']).to_dict()
+    
+    for idx, row in df_merged.iterrows():
+        drivers = []
+        for feat in driver_features:
+            val = row[feat]
+            mean = fleet_stats[feat]['mean']
+            std = fleet_stats[feat]['std'] or 1e-6
+            
+            # If feature is 1.5 standard deviations above mean, it's a driver
+            if val > mean + 1.5 * std:
+                friendly_name = feat.replace('_', ' ').title()
+                drivers.append(friendly_name)
+        
+        risk_drivers_list.append(", ".join(drivers) if drivers else "Fleet Baseline")
+
+    # 6. Store Snapshot
     df_snap = pd.DataFrame({
         "component_id": df_merged["component_id"],
         "snapshot_date": datetime.now(),
@@ -148,8 +175,9 @@ def calculate_risk(weights=None):
         "impact_score": df_merged["impact_score"],
         "risk_score": df_merged["risk_score"],
         "risk_level": df_merged["risk_level"],
-        "is_training_instance": False, # Live recomputation
-        "failure_label": 0 # Live recomputation
+        "is_training_instance": False, 
+        "failure_label": 0,
+        "risk_drivers": risk_drivers_list
     })
     
     df_snap.to_sql('risk_snapshot', engine, if_exists='append', index=False)
