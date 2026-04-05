@@ -6,9 +6,18 @@ from datetime import datetime, timedelta
 import random
 
 # Database connection
-LOCAL_DB_URL = "postgresql://bhawuk:Bhawuk%4042@localhost:5432/aeroguard_db"
-DOCKER_DB_URL = os.getenv("DATABASE_URL", LOCAL_DB_URL)
-engine = create_engine(DOCKER_DB_URL.replace("@db:5432", "@localhost:5432"))
+def get_engine():
+    # Inside Docker, the DB is 'db'. Locally, it's 'localhost'.
+    env_url = os.getenv("DATABASE_URL")
+    if env_url:
+        return create_engine(env_url)
+    
+    # Fallbacks for manual execution
+    db_host = "db" if os.path.exists("/.dockerenv") else "localhost"
+    url = f"postgresql://bhawuk:Bhawuk%4042@{db_host}:5432/aeroguard_db"
+    return create_engine(url)
+
+engine = get_engine()
 
 def generate_historical_snapshots(days=30):
     print(f"--- Generating {days} days of historical risk snapshots ---")

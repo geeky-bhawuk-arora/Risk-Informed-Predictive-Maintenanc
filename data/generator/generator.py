@@ -247,21 +247,23 @@ def generate_sensor_data(config, failing_components):
                     
                     if has_future_failure:
                         days_until_fail = (failure_date - curr).days
-                        if 0 <= days_until_fail <= 14:
-                            # Add noise to degradation: some components degrade faster than others
-                            variability = random.uniform(0.5, 1.5)
-                            degradation = (variability * (15 - days_until_fail)**2.2) / 15.0
+                        if 0 <= days_until_fail <= 21: # Practice: Longer, stochastic pre-cursors
+                            # Modeling as a Wiener process with drift towards failure
+                            # Drift increases as we get closer
+                            drift = (22 - days_until_fail) / 4.0
+                            diffusion = np.random.normal(0, 0.5) # Stochastic noise
+                            degradation = max(0, (drift + diffusion) ** 1.8) / 10.0
                     elif is_false_alarm:
-                        # Periodic "drift" that mimics degradation but resets
-                        drift_cycle = (curr.timetuple().tm_yday % 30)
-                        if drift_cycle > 20: 
-                            degradation = (drift_cycle - 20)**1.5 / 5.0
+                        # Practice: Stochastic "Drift" that resets to simulate noisy instrumentation
+                        drift_cycle = (curr.timetuple().tm_yday % 45)
+                        if drift_cycle > 35: 
+                            degradation = (drift_cycle - 35 + np.random.normal(0, 1.0))**1.5 / 8.0
                     
-                    seasonal = 4.0 * np.sin(2 * np.pi * curr.timetuple().tm_yday / 365) if "Temp" in chan or "EGT" in chan else 0
-                    is_ano = random.random() < 0.005
-                    spike = random.uniform(10, 30) if is_ano else 0
+                    seasonal = 5.0 * np.sin(2 * np.pi * curr.timetuple().tm_yday / 365) if "Temp" in chan or "EGT" in chan else 0
+                    is_ano = random.random() < 0.008
+                    spike = random.uniform(15, 35) if is_ano else 0
                     
-                    val = base_val + (degradation * 15 * degrad_mult) + seasonal + spike + np.random.normal(0, noise_lv)
+                    val = base_val + (degradation * 12 * degrad_mult) + seasonal + spike + np.random.normal(0, noise_lv)
                     
                     batch.append({
                         "reading_id": r_id, "component_id": c_id, "sensor_type": chan, "timestamp": curr,

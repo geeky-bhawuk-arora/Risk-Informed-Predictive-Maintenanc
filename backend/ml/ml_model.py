@@ -112,11 +112,11 @@ def train_and_predict():
             brier = brier_score_loss(y_test, y_probs)
             
             # Feature Importance (if applicable - extraction from calibrated wrapper)
-            if hasattr(calibrated_clf.calibrated_classifiers_[0].base_estimator, 'feature_importances_'):
+            if hasattr(calibrated_clf.calibrated_classifiers_[0].estimator, 'feature_importances_'):
                 ohe_cats = pipe.named_steps['pre'].transformers_[1][1].get_feature_names_out(cat_features)
                 feature_names = num_features + list(ohe_cats)
                 # Average importance across CV folds
-                importances = np.mean([c.base_estimator.feature_importances_ for c in calibrated_clf.calibrated_classifiers_], axis=0)
+                importances = np.mean([c.estimator.feature_importances_ for c in calibrated_clf.calibrated_classifiers_], axis=0)
                 for f_name, imp in zip(feature_names, importances):
                     mlflow.log_metric(f"importance_{f_name}", imp)
 
